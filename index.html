@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Трекер Времени</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='13' y='2' width='6' height='3' rx='1.5' fill='%23388e3c'/%3E%3Ccircle cx='16' cy='20' r='11' fill='%234caf50'/%3E%3Ccircle cx='16' cy='20' r='8.5' fill='none' stroke='%23fff' stroke-width='1' opacity='.25'/%3E%3Cline x1='16' y1='20' x2='16' y2='13' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='16' y1='20' x2='21' y2='20' stroke='%23fff' stroke-width='1.5' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='20' r='1.8' fill='%23fff'/%3E%3Crect x='15' y='5' width='2' height='4' rx='1' fill='%23388e3c'/%3E%3C/svg%3E">
 <script>/* FOUC prevention */
 (function(){
   var p=function(){try{return JSON.parse(localStorage.getItem('preferences'))||{};}catch(e){return{};}};
@@ -1217,18 +1218,24 @@ var Render=(function(){
 
 /* ══════════════════════════════════════
    PICTURE-IN-PICTURE
-   Document PiP API — Chrome/Edge 116+.
-   Floating always-on-top window showing active timer.
+   Desktop: Document PiP API (Chrome/Edge 116+).
+   Mobile/fallback: Video+Canvas PiP API.
 ══════════════════════════════════════ */
 var PiP=(function(){
+  // Desktop (Document PiP) state
   var pipWin=null;
+  // Shared: which timer this PiP instance is showing
+  var pipTimerId=null;
+  // Mobile (Video PiP) state
+  var mobVideo=null,mobCanvas=null,mobCtx=null,mobInterval=null,mobPipActive=false;
 
   var PIP_CSS=[
     '*{box-sizing:border-box;margin:0;padding:0}',
-    'body{font-family:Arial,sans-serif;background:rgba(18,18,28,.92);color:#e8e8e8;',
+    'body{font-family:Arial,sans-serif;background:rgba(18,18,28,.68);color:#e8e8e8;',
     'height:100vh;width:100vw;display:flex;align-items:center;justify-content:center;',
-    'overflow:hidden;user-select:none;transition:background .35s}',
-    'body.running{background:rgba(8,26,12,.94)}',
+    'overflow:hidden;user-select:none;transition:background .35s;',
+    'backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}',
+    'body.running{background:rgba(8,26,12,.72)}',
     '#pr{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px;width:100%;text-align:center}',
     '#pn{font-size:12px;font-weight:bold;opacity:.7;width:100%;word-break:break-word;line-height:1.3}',
     '#pt{font-size:30px;font-weight:bold;font-variant-numeric:tabular-nums;',
@@ -1241,8 +1248,13 @@ var PiP=(function(){
     '#pb:hover{background:rgba(255,255,255,.22)}'
   ].join('');
 
-  function supported(){return'documentPictureInPicture'in window;}
-  function isOpen(){return pipWin&&!pipWin.closed;}
+  function docSupported(){return'documentPictureInPicture'in window;}
+  function vidSupported(){var v=document.createElement('video');return typeof v.requestPictureInPicture==='function';}
+  function supported(){return docSupported()||vidSupported();}
+  function useVideo(){return!docSupported()&&vidSupported();}
+  function isOpen(){return mobPipActive||(pipWin&&!pipWin.closed);}
+
+  /* ── Desktop: Document PiP ── */
 
   function buildDOM(doc){
     doc.body.innerHTML='';
@@ -1255,15 +1267,17 @@ var PiP=(function(){
     root.appendChild(nm);root.appendChild(tm);root.appendChild(ph);root.appendChild(btn);
     doc.body.appendChild(root);
     btn.addEventListener('click',function(){
-      if(S.activeId) toggleTimer(S.activeId);
-      else if(S.timers.length) toggleTimer(S.timers[0].id);
+      // Toggle the active timer, or the timer this PiP was opened for
+      var targetId=S.activeId||(pipTimerId&&S.timers.find(function(x){return x.id===pipTimerId;})?pipTimerId:null);
+      if(targetId) toggleTimer(targetId);
       update();
     });
   }
 
-  function openPip(){
-    if(!supported()) return;
-    if(isOpen()){pipWin.focus();return;}
+  function openDocPip(){
+    if(!docSupported()) return;
+    if(pipWin&&!pipWin.closed){pipWin.focus();return;}
+    pipTimerId=S.activeId||(S.timers.length?S.timers[0].id:null);
     documentPictureInPicture.requestWindow({width:210,height:160}).then(function(w){
       pipWin=w;
       var style=pipWin.document.createElement('style');
@@ -1276,24 +1290,153 @@ var PiP=(function(){
     }).catch(function(e){console.warn('PiP failed:',e);});
   }
 
-  function closePip(){
-    if(isOpen()) pipWin.close();
+  function closeDocPip(){
+    if(pipWin&&!pipWin.closed) pipWin.close();
     pipWin=null;updateBtn();
   }
 
+  /* ── Mobile: Video+Canvas PiP ── */
+
+  function drawCanvas(){
+    if(!mobCtx) return;
+    var W=400,H=240;
+    var t=pipTimerId?S.timers.find(function(x){return x.id===pipTimerId;}):null;
+    var running=t&&t.active;
+    mobCtx.fillStyle=running?'#081a0c':'#12121c';
+    mobCtx.fillRect(0,0,W,H);
+    if(t){
+      // Task name (truncate if too long)
+      mobCtx.font='bold 22px Arial,sans-serif';
+      var nm=t.name;
+      while(nm.length>1&&mobCtx.measureText(nm).width>360) nm=nm.slice(0,-1);
+      if(nm!==t.name) nm+='…';
+      mobCtx.fillStyle='rgba(232,232,232,0.75)';
+      mobCtx.textAlign='center';
+      mobCtx.textBaseline='alphabetic';
+      mobCtx.fillText(nm,W/2,52);
+      // Timer value
+      var timeStr;
+      if(t.pom){
+        var total=pomTotal(t),phMs=t.elapsed-t.pomElapsed;
+        timeStr=fmtMs(Math.max(0,total-phMs));
+      } else {
+        timeStr=fmtMs(t.elapsed);
+      }
+      mobCtx.fillStyle=running?'#69f0ae':'#a5d6a7';
+      mobCtx.font='bold 72px Arial,sans-serif';
+      mobCtx.fillText(timeStr,W/2,145);
+      // Phase / category
+      var phase=t.pom?T(t.pomPhase==='work'?'pomWork':t.pomPhase==='break'?'pomBreak':'pomLong'):t.cat;
+      mobCtx.fillStyle='rgba(232,232,232,0.4)';
+      mobCtx.font='18px Arial,sans-serif';
+      mobCtx.fillText(phase||'',W/2,190);
+    } else {
+      mobCtx.fillStyle='rgba(232,232,232,0.4)';
+      mobCtx.font='24px Arial,sans-serif';
+      mobCtx.textAlign='center';
+      mobCtx.textBaseline='middle';
+      mobCtx.fillText(T('pipNoTimer'),W/2,H/2);
+    }
+  }
+
+  // Sync video play/pause state to timer state without triggering our own event handlers
+  var _syncingVideo=false;
+  function syncVideoToTimer(){
+    if(!mobVideo||_syncingVideo) return;
+    var t=pipTimerId?S.timers.find(function(x){return x.id===pipTimerId;}):null;
+    var shouldPlay=!!(t&&t.active);
+    if(shouldPlay&&mobVideo.paused){
+      _syncingVideo=true;
+      mobVideo.play().catch(function(){}).then(function(){_syncingVideo=false;});
+    } else if(!shouldPlay&&!mobVideo.paused){
+      _syncingVideo=true;
+      mobVideo.pause();
+      setTimeout(function(){_syncingVideo=false;},50);
+    }
+  }
+
+  function openMobPip(){
+    if(mobPipActive) return;
+    mobCanvas=document.createElement('canvas');
+    mobCanvas.width=400;mobCanvas.height=240;
+    mobCtx=mobCanvas.getContext('2d');
+    mobVideo=document.createElement('video');
+    mobVideo.muted=true;
+    mobVideo.srcObject=mobCanvas.captureStream(2);
+    pipTimerId=S.activeId||(S.timers.length?S.timers[0].id:null);
+    drawCanvas();
+    mobVideo.addEventListener('play',function(){
+      if(_syncingVideo) return;
+      // User pressed play in PiP overlay — start the shown timer
+      if(pipTimerId&&!S.activeId){
+        toggleTimer(pipTimerId);
+        renderAll();
+        drawCanvas();
+      }
+    });
+    mobVideo.addEventListener('pause',function(){
+      if(_syncingVideo) return;
+      // User pressed pause in PiP overlay — stop the active timer
+      if(S.activeId){
+        toggleTimer(S.activeId);
+        renderAll();
+        drawCanvas();
+      }
+    });
+    mobVideo.addEventListener('leavepictureinpicture',function(){
+      mobPipActive=false;
+      clearInterval(mobInterval);mobInterval=null;
+      mobVideo=null;mobCanvas=null;mobCtx=null;
+      updateBtn();
+    });
+    mobVideo.play().then(function(){
+      return mobVideo.requestPictureInPicture();
+    }).then(function(){
+      mobPipActive=true;
+      updateBtn();
+      mobInterval=setInterval(function(){
+        drawCanvas();
+        syncVideoToTimer();
+        if(navigator.mediaSession&&pipTimerId){
+          var t=S.timers.find(function(x){return x.id===pipTimerId;});
+          if(t) navigator.mediaSession.metadata=new MediaMetadata({title:t.name,artist:fmtMs(t.elapsed)});
+        }
+      },1000);
+    }).catch(function(e){console.warn('Video PiP failed:',e);});
+  }
+
+  function closeMobPip(){
+    if(document.pictureInPictureElement===mobVideo) document.exitPictureInPicture().catch(function(){});
+    mobPipActive=false;
+    clearInterval(mobInterval);mobInterval=null;
+    mobVideo=null;mobCanvas=null;mobCtx=null;
+    updateBtn();
+  }
+
+  /* ── Public API ── */
+
   function toggle(){
-    if(isOpen()) closePip(); else openPip();
+    if(useVideo()){
+      if(mobPipActive) closeMobPip(); else openMobPip();
+    } else {
+      if(pipWin&&!pipWin.closed) closeDocPip(); else openDocPip();
+    }
   }
 
   function update(){
-    if(!isOpen()) return;
+    // Track active timer so PiP remembers it after pause
+    if(S.activeId) pipTimerId=S.activeId;
+    if(useVideo()){drawCanvas();syncVideoToTimer();return;}
+    if(!pipWin||pipWin.closed) return;
     var doc=pipWin.document;
     var nmEl=doc.getElementById('pn');
     var tmEl=doc.getElementById('pt');
     var phEl=doc.getElementById('pp');
     var btnEl=doc.getElementById('pb');
     if(!nmEl) return;
-    var t=S.activeId?S.timers.find(function(x){return x.id===S.activeId;}):null;
+    // Show active timer; if nothing running, show the timer this PiP was opened for
+    var t=S.activeId?S.timers.find(function(x){return x.id===S.activeId;}):
+          (pipTimerId?S.timers.find(function(x){return x.id===pipTimerId;}):null);
     if(t){
       nmEl.textContent=t.name;
       if(t.pom){
@@ -1304,19 +1447,12 @@ var PiP=(function(){
         tmEl.textContent=fmtMs(t.elapsed);
         phEl.textContent=t.cat;
       }
-      btnEl.textContent='⏸';
-      doc.body.className='running';
+      btnEl.textContent=t.active?'⏸':'▶';
+      doc.body.className=t.active?'running':'';
     } else {
-      var first=S.timers[0];
-      if(first){
-        nmEl.textContent=first.name;
-        tmEl.textContent=fmtMs(first.elapsed);
-        phEl.textContent=first.cat;
-      } else {
-        nmEl.textContent=T('pipNoTimer');
-        tmEl.textContent='—';
-        phEl.textContent='';
-      }
+      nmEl.textContent=T('pipNoTimer');
+      tmEl.textContent='—';
+      phEl.textContent='';
       btnEl.textContent='▶';
       doc.body.className='';
     }
@@ -1330,6 +1466,7 @@ var PiP=(function(){
       btn.title=T('pipNotSupported');
       return;
     }
+    btn.disabled=false;
     if(isOpen()){
       btn.classList.add('pip-active');
       btn.title=T('pipClose');
