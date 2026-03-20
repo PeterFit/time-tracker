@@ -159,6 +159,15 @@ footer a:hover{text-decoration:underline}
   padding:.55rem 1rem;border-radius:12px;font-size:.85rem;font-weight:600;
   box-shadow:0 4px 16px rgba(0,0,0,.25);pointer-events:none;z-index:9999;
   animation:toastIn .3s ease,toastOut .3s ease 2.7s forwards}
+
+/* ── Star prompt ── */
+#starPrompt{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--bg-card);
+  color:var(--text-primary);border:1px solid var(--border);border-radius:14px;
+  padding:.9rem 1.1rem;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:9998;
+  max-width:260px;animation:toastIn .3s ease}
+#starPrompt p{font-size:.85rem;margin-bottom:.75rem;line-height:1.4}
+#starPrompt .star-actions{display:flex;gap:.5rem;justify-content:flex-end}
+#starPrompt .star-actions button{min-height:34px;font-size:.8rem}
 @keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes toastOut{from{opacity:1}to{opacity:0}}
 
@@ -419,6 +428,9 @@ var STRINGS={
     ach_month_streak:'🌟 Месяц подряд',
     ach_notebook_user:'📝 Записная книжка',
     ach_exporter:'📤 Экспорт данных',
+    starTitle:'⭐ Нравится трекер? Поставь звезду на GitHub — это помогает проекту развиваться.',
+    starBtn:'Поставить звезду',
+    starDismiss:'Не сейчас',
     instr:[
       '<b>Добавить таймер:</b> Кнопка «+ Добавить» или клавиша <kbd>N</kbd>.',
       '<b>Запуск/пауза:</b> Нажмите на карточку. Повторное нажатие — пауза.',
@@ -471,6 +483,9 @@ var STRINGS={
     ach_month_streak:'🌟 Month streak',
     ach_notebook_user:'📝 Notebook user',
     ach_exporter:'📤 Data exported',
+    starTitle:'⭐ Enjoying the tracker? Star it on GitHub — it helps the project grow.',
+    starBtn:'Star on GitHub',
+    starDismiss:'Maybe later',
     instr:[
       '<b>Add timer:</b> Click «+ Add» or press <kbd>N</kbd>.',
       '<b>Start/pause:</b> Click the card. Click again to pause.',
@@ -713,6 +728,34 @@ function stopPomWorker(){
 ══════════════════════════════════════ */
 var rafId=null,rafRunning=false;
 
+/* ── Star prompt ── */
+var starPromptDone=!!localStorage.getItem('starPromptShown');
+function checkStarPrompt(){
+  if(starPromptDone) return;
+  var total=S.timers.reduce(function(s,t){return s+t.elapsed;},0);
+  if(total<1800000) return;
+  starPromptDone=true;
+  localStorage.setItem('starPromptShown','1');
+  showStarPrompt();
+}
+function showStarPrompt(){
+  var el=document.createElement('div');
+  el.id='starPrompt';
+  el.innerHTML='<p>'+T('starTitle')+'</p>'+
+    '<div class="star-actions">'+
+      '<button id="starDismissBtn">'+T('starDismiss')+'</button>'+
+      '<button id="starOkBtn" class="primary">'+T('starBtn')+'</button>'+
+    '</div>';
+  document.body.appendChild(el);
+  document.getElementById('starOkBtn').addEventListener('click',function(){
+    window.open('https://github.com/PeterFit/time-tracker','_blank','noopener');
+    el.remove();
+  });
+  document.getElementById('starDismissBtn').addEventListener('click',function(){
+    el.remove();
+  });
+}
+
 function tick(){
   var t=S.timers.find(function(x){return x.id===S.activeId;});
   if(!t||!t.active){rafRunning=false;rafId=null;return;}
@@ -720,6 +763,7 @@ function tick(){
   if(t.pom) checkPomPhase(t);
   Render.updateActive();
   PiP.update();
+  checkStarPrompt();
   rafId=requestAnimationFrame(tick);
 }
 function startRaf(){if(!rafRunning){rafRunning=true;rafId=requestAnimationFrame(tick);}}
