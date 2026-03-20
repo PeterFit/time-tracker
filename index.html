@@ -158,7 +158,7 @@ footer a:hover{text-decoration:underline}
   background:var(--accent);color:#fff;
   padding:.55rem 1rem;border-radius:12px;font-size:.85rem;font-weight:600;
   box-shadow:0 4px 16px rgba(0,0,0,.25);pointer-events:none;z-index:9999;
-  animation:toastIn .3s ease,toastOut .3s ease 2.7s forwards}
+  animation:toastIn .3s ease,toastOut .3s ease 4.7s forwards}
 
 /* ── Star prompt ── */
 #starPrompt{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--bg-card);
@@ -224,6 +224,34 @@ dialog::backdrop{
 .det-body ol{padding-left:1.4rem}
 .det-body li{margin-bottom:.5rem;font-size:.88rem;line-height:1.5}
 
+/* ── Countdown badge on card ── */
+.cd-badge{font-size:.62rem;padding:.1rem .35rem;border-radius:6px;
+  background:var(--pom-break);color:#fff;align-self:center;white-space:nowrap}
+.timer-time.cd-low{color:var(--danger)}
+.cd-restart{min-height:30px!important;min-width:unset!important;height:30px;
+  padding:0 .65rem;font-size:.8rem;border-radius:8px;margin-top:.1rem}
+/* ── Countdown duration row ── */
+.cd-dur-inputs{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-top:.35rem}
+.cd-dur-inputs input[type=number]{width:64px}
+.cd-dur-inputs span{font-size:.82rem;color:var(--text-secondary)}
+
+/* ── Randomizer ── */
+.rand-tabs{display:flex;gap:.4rem;margin-bottom:.75rem}
+.rand-tab{min-height:32px;padding:.2rem .7rem;font-size:.82rem;min-width:unset}
+.rand-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.rand-range{display:flex;align-items:center;gap:.5rem;margin-bottom:.6rem;font-size:.9rem;flex-wrap:wrap}
+.rand-range input[type=number]{width:80px;padding:.3rem .5rem;border:1px solid var(--border);
+  border-radius:8px;background:var(--bg-primary);color:var(--text-primary);font-size:.9rem;text-align:center}
+.rand-range input[type=number]:focus{outline:none;border-color:var(--accent)}
+.rand-result{margin-top:.75rem;font-size:2.2rem;font-weight:bold;color:var(--accent);
+  text-align:center;min-height:3rem;word-break:break-word}
+@keyframes randPop{from{opacity:0;transform:scale(.82)}to{opacity:1;transform:scale(1)}}
+.rand-result.popped{animation:randPop .2s cubic-bezier(.34,1.4,.64,1)}
+#randListInput{width:100%;min-height:80px;padding:.5rem;border:1px solid var(--border);
+  border-radius:8px;background:var(--bg-primary);color:var(--text-primary);
+  font-size:.85rem;resize:vertical;margin-bottom:.6rem}
+#randListInput:focus{outline:none;border-color:var(--accent)}
+
 /* ── Animations ── */
 @keyframes fadeIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
 @keyframes fadeOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.94)}}
@@ -283,6 +311,31 @@ dialog::backdrop{
     <textarea id="notebook" data-i18n-ph="notebookPh"></textarea>
   </section>
 
+  <details id="randSection">
+    <summary data-i18n="randTitle">🎲 Рандомайзер</summary>
+    <div class="det-body">
+      <div class="rand-tabs">
+        <button class="rand-tab active" id="randTabNum" data-i18n="randNumTab">Число</button>
+        <button class="rand-tab" id="randTabList" data-i18n="randListTab">Из списка</button>
+      </div>
+      <div id="randPanelNum">
+        <div class="rand-range">
+          <span data-i18n="randFrom">от</span>
+          <input type="number" id="randFrom" value="1">
+          <span data-i18n="randTo">до</span>
+          <input type="number" id="randTo" value="100">
+        </div>
+        <button id="randNumBtn" class="primary" data-i18n="randGenerate">🎲 Сгенерировать</button>
+        <div class="rand-result" id="randNumResult"></div>
+      </div>
+      <div id="randPanelList" style="display:none">
+        <textarea id="randListInput" data-i18n-ph="randListPh"></textarea>
+        <button id="randListBtn" class="primary" data-i18n="randPick">🎲 Выбрать</button>
+        <div class="rand-result" id="randListResult"></div>
+      </div>
+    </div>
+  </details>
+
   <details id="statsSection">
     <summary data-i18n="statsTitle">📊 Статистика</summary>
     <div class="det-body">
@@ -337,6 +390,19 @@ dialog::backdrop{
       <input type="checkbox" id="newPom">
       <span data-i18n="dlgAddPom">Режим Помодоро</span>
     </label>
+    <label class="dlg-check">
+      <input type="checkbox" id="newCountdown">
+      <span data-i18n="dlgAddCountdown">Таймер обратного отсчёта</span>
+    </label>
+    <div id="cdDurRow" style="display:none">
+      <label data-i18n="dlgAddCdMin">Длительность</label>
+      <div class="cd-dur-inputs">
+        <input type="number" id="cdMinutes" min="0" max="1439" value="25">
+        <span data-i18n="minLabel">мин</span>
+        <input type="number" id="cdSeconds" min="0" max="59" value="0">
+        <span data-i18n="secLabel">сек</span>
+      </div>
+    </div>
   </div>
   <div class="dlg-actions">
     <button type="button" id="dlgAddCancel" data-i18n="cancel">Отмена</button>
@@ -426,11 +492,38 @@ var STRINGS={
     ach_three_streak:'🔥 3 дня подряд',
     ach_week_streak:'🔥 Неделя подряд',
     ach_month_streak:'🌟 Месяц подряд',
+    ach_five_hours:'🌱 Пять часов',
+    ach_fifty_hours:'🌿 Пятьдесят часов',
+    ach_pom_twentyfive:'🍅🍅🍅 Двадцать пять Помодоро',
+    ach_pom_hundred:'🍅🏆 Сто Помодоро',
+    ach_two_weeks_streak:'🔥 Две недели подряд',
+    ach_two_hundred_hours:'💎 Двести часов',
+    ach_three_hundred_hours:'🔮 Триста часов',
+    ach_five_hundred_hours:'⚡ Пятьсот часов',
+    ach_thousand_hours:'👑 Тысяча часов',
+    ach_cd_first:'⏳ Первый отсчёт',
+    ach_cd_five:'⏱ Пять отсчётов',
     ach_notebook_user:'📝 Записная книжка',
     ach_exporter:'📤 Экспорт данных',
     starTitle:'⭐ Нравится трекер? Поставь звезду на GitHub — это помогает проекту развиваться.',
     starBtn:'Поставить звезду',
     starDismiss:'Не сейчас',
+    dlgAddCountdown:'Таймер обратного отсчёта',
+    dlgAddCdMin:'Длительность',
+    minLabel:'мин',
+    secLabel:'сек',
+    cdMode:'⏳ отсчёт',
+    cdDone:'⏰ Время вышло!',
+    cdRestart:'↺ Заново',
+    randTitle:'🎲 Рандомайзер',
+    randNumTab:'Число',
+    randListTab:'Из списка',
+    randGenerate:'🎲 Сгенерировать',
+    randPick:'🎲 Выбрать',
+    randListPh:'Введите варианты, каждый с новой строки…',
+    randEmptyList:'Список пуст',
+    randFrom:'от',
+    randTo:'до',
     instr:[
       '<b>Добавить таймер:</b> Кнопка «+ Добавить» или клавиша <kbd>N</kbd>.',
       '<b>Запуск/пауза:</b> Нажмите на карточку. Повторное нажатие — пауза.',
@@ -440,7 +533,9 @@ var STRINGS={
       '<b>Помодоро:</b> При создании включите режим — кольцо и звуковые уведомления.',
       '<b>Горячие клавиши:</b> N — новый, Space — пауза, T — тема, +/− — шрифт, 1–9 — таймер, Del — удалить.',
       '<b>Достижения:</b> 12 наград за активность — за время работы, серии дней, Помодоро, экспорт, заметки. Уведомление появляется при разблокировке.',
-      '<b>Mini-виджет (PiP):</b> Кнопка 📌 — плавающее окно поверх всех приложений с текущим таймером. Требует Chrome/Edge 116+.'
+      '<b>Mini-виджет (PiP):</b> Кнопка 📌 — плавающее окно поверх всех приложений с текущим таймером. Требует Chrome/Edge 116+.',
+      '<b>Обратный отсчёт:</b> При создании включите «Таймер обратного отсчёта», задайте мин и сек. По окончании — сигнал и уведомление с именем таймера. Кнопка «↺ Заново» или клик по карточке — перезапуск.',
+      '<b>Рандомайзер:</b> Раздел 🎲 (сразу под записной книжкой) — случайное число в диапазоне или выбор случайного варианта из списка (имена, задачи и др.).'
     ]
   },
   en:{
@@ -481,11 +576,38 @@ var STRINGS={
     ach_three_streak:'🔥 3-day streak',
     ach_week_streak:'🔥 Week streak',
     ach_month_streak:'🌟 Month streak',
+    ach_five_hours:'🌱 Five hours',
+    ach_fifty_hours:'🌿 Fifty hours',
+    ach_pom_twentyfive:'🍅🍅🍅 Twenty-five Pomodoros',
+    ach_pom_hundred:'🍅🏆 Hundred Pomodoros',
+    ach_two_weeks_streak:'🔥 Two weeks streak',
+    ach_two_hundred_hours:'💎 Two hundred hours',
+    ach_three_hundred_hours:'🔮 Three hundred hours',
+    ach_five_hundred_hours:'⚡ Five hundred hours',
+    ach_thousand_hours:'👑 Thousand hours',
+    ach_cd_first:'⏳ First countdown',
+    ach_cd_five:'⏱ Five countdowns',
     ach_notebook_user:'📝 Notebook user',
     ach_exporter:'📤 Data exported',
     starTitle:'⭐ Enjoying the tracker? Star it on GitHub — it helps the project grow.',
     starBtn:'Star on GitHub',
     starDismiss:'Maybe later',
+    dlgAddCountdown:'Countdown Timer',
+    dlgAddCdMin:'Duration',
+    minLabel:'min',
+    secLabel:'sec',
+    cdMode:'⏳ countdown',
+    cdDone:'⏰ Time is up!',
+    cdRestart:'↺ Restart',
+    randTitle:'🎲 Randomizer',
+    randNumTab:'Number',
+    randListTab:'From list',
+    randGenerate:'🎲 Generate',
+    randPick:'🎲 Pick',
+    randListPh:'Enter options, one per line…',
+    randEmptyList:'List is empty',
+    randFrom:'from',
+    randTo:'to',
     instr:[
       '<b>Add timer:</b> Click «+ Add» or press <kbd>N</kbd>.',
       '<b>Start/pause:</b> Click the card. Click again to pause.',
@@ -495,7 +617,9 @@ var STRINGS={
       '<b>Pomodoro:</b> Enable at creation — countdown ring + sounds.',
       '<b>Shortcuts:</b> N — add, Space — pause, T — theme, +/− — font, 1–9 — timer, Del — delete.',
       '<b>Achievements:</b> 12 awards for activity — time tracked, streaks, Pomodoro, export, notebook. A toast appears on unlock.',
-      '<b>Mini widget (PiP):</b> 📌 button — floating window above all apps showing the current timer. Requires Chrome/Edge 116+.'
+      '<b>Mini widget (PiP):</b> 📌 button — floating window above all apps showing the current timer. Requires Chrome/Edge 116+.',
+      '<b>Countdown:</b> Enable «Countdown Timer» when adding, set minutes and seconds. On finish — alarm and notification with the timer name. «↺ Restart» button or card click restarts it.',
+      '<b>Randomizer:</b> The 🎲 section (right below the notebook) — random number in a range or random pick from a list (names, tasks, etc.).'
     ]
   }
 };
@@ -575,7 +699,7 @@ var S={
   notebook:'',
   cats:DEF_CATS.map(function(c){return Object.assign({},c);}),
   history:[],log:[],
-  streaks:{lastDate:null,cur:0,best:0,ach:[],exported:false,nbWritten:false},
+  streaks:{lastDate:null,cur:0,best:0,ach:[],exported:false,nbWritten:false,cdCount:0},
   filterCat:null
 };
 
@@ -631,6 +755,8 @@ function loadAll(){
           pomElapsed:t.pomElapsed||t.pomodoroElapsed||0,
           pomWorkMs:t.pomWorkMs||0,
           pomBreakMs:t.pomBreakMs||0,
+          countdown:t.countdown||false,
+          cdMs:t.cdMs||0,
           demo:t.demo||false
         };
       });
@@ -648,7 +774,7 @@ function loadAll(){
     var log=localStorage.getItem('activityLog');
     if(log) S.log=JSON.parse(log);
     var str=localStorage.getItem('streaks');
-    if(str) S.streaks=Object.assign({exported:false,nbWritten:false},JSON.parse(str));
+    if(str) S.streaks=Object.assign({exported:false,nbWritten:false,cdCount:0},JSON.parse(str));
   }catch(e){console.error('load:',e);}
 }
 
@@ -764,6 +890,21 @@ function tick(){
   if(!t||!t.active){rafRunning=false;rafId=null;return;}
   t.elapsed=Date.now()-t.startTime;
   if(t.pom) checkPomPhase(t);
+  /* Countdown completion */
+  if(t.countdown&&t.cdMs>0&&t.elapsed>=t.cdMs){
+    t.elapsed=t.cdMs;
+    pauseActive(false);
+    Sounds.phaseEnd();
+    showToast('⏰ '+t.name+' — '+T('cdDone'));
+    S.streaks.cdCount=(S.streaks.cdCount||0)+1;
+    checkAch();markDirty();
+    Render.updateActive();
+    var doneCard=document.querySelector('.timer-card[data-id="'+t.id+'"]');
+    if(doneCard){var rb=doneCard.querySelector('.cd-restart');if(rb)rb.style.display='';}
+    PiP.update();
+    checkStarPrompt();
+    return;
+  }
   Render.updateActive();
   PiP.update();
   checkStarPrompt();
@@ -815,7 +956,11 @@ function activateTimer(id){
 function pauseActive(doSave){
   if(!S.activeId) return;
   var t=S.timers.find(function(x){return x.id===S.activeId;});
-  if(t){t.active=false;t.elapsed=Date.now()-t.startTime;t.startTime=null;t.lastSave=null;}
+  if(t){
+    t.active=false;t.elapsed=Date.now()-t.startTime;t.startTime=null;t.lastSave=null;
+    var ac=document.querySelector('.timer-card[data-id="'+t.id+'"]');
+    if(ac) ac.classList.remove('active');
+  }
   S.activeId=null;
   stopRaf();
   stopPomWorker();
@@ -828,6 +973,11 @@ function pauseActive(doSave){
 
 /* FIX: no full re-render on toggle — surgical class update only */
 function toggleTimer(id){
+  /* If countdown is done — restart instead of toggle */
+  var td=S.timers.find(function(x){return x.id===id;});
+  if(td&&td.countdown&&td.cdMs>0&&!td.active&&td.elapsed>=td.cdMs){
+    restartCountdown(id);return;
+  }
   var prevId=S.activeId;
   if(S.activeId===id){
     var t=S.timers.find(function(x){return x.id===id;});
@@ -922,17 +1072,29 @@ function checkAch(){
   var cur=realTimers.reduce(function(acc,t){return acc+t.elapsed;},0);
   var hist=S.history.reduce(function(acc,h){return acc+(h.dur||0);},0);
   var grand=cur+hist;
-  if(grand>=3600000)   add('one_hour');
-  if(grand>=36000000)  add('ten_hours');
-  if(grand>=360000000) add('hundred_hours');
+  if(grand>=3600000)    add('one_hour');
+  if(grand>=18000000)   add('five_hours');
+  if(grand>=36000000)   add('ten_hours');
+  if(grand>=180000000)  add('fifty_hours');
+  if(grand>=360000000)  add('hundred_hours');
+  if(grand>=720000000)  add('two_hundred_hours');
+  if(grand>=1080000000) add('three_hundred_hours');
+  if(grand>=1800000000) add('five_hundred_hours');
+  if(grand>=3600000000) add('thousand_hours');
   /* Pomodoro sessions — demo timers excluded */
   var pomTotal=realTimers.reduce(function(acc,t){return acc+t.pomCount;},0);
-  if(pomTotal>=1)  add('pom_first');
-  if(pomTotal>=10) add('pom_ten');
+  if(pomTotal>=1)   add('pom_first');
+  if(pomTotal>=10)  add('pom_ten');
+  if(pomTotal>=25)  add('pom_twentyfive');
+  if(pomTotal>=100) add('pom_hundred');
   /* Streaks */
   if(s.cur>=3)  add('three_streak');
   if(s.cur>=7)  add('week_streak');
+  if(s.cur>=14) add('two_weeks_streak');
   if(s.cur>=30) add('month_streak');
+  /* Countdown completions */
+  if((s.cdCount||0)>=1) add('cd_first');
+  if((s.cdCount||0)>=5) add('cd_five');
   /* Usage milestones */
   if(s.nbWritten)  add('notebook_user');
   if(s.exported)   add('exporter');
@@ -946,7 +1108,14 @@ function showAchToast(label){
   t.className='ach-toast';
   t.textContent=T('achUnlocked')+': '+label;
   document.body.appendChild(t);
-  setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},3100);
+  setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},5100);
+}
+function showToast(text){
+  var t=document.createElement('div');
+  t.className='ach-toast';
+  t.textContent=text;
+  document.body.appendChild(t);
+  setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},5100);
 }
 
 /* ══════════════════════════════════════
@@ -1054,8 +1223,22 @@ var Render=(function(){
 
     if(!t.pom){
       var timeEl=document.createElement('div');
-      timeEl.className='timer-time';timeEl.textContent=fmtMs(t.elapsed);
+      timeEl.className='timer-time';
+      timeEl.textContent=t.countdown&&t.cdMs>0?fmtMs(Math.max(0,t.cdMs-t.elapsed)):fmtMs(t.elapsed);
       card.appendChild(timeEl);
+      if(t.countdown&&t.cdMs>0){
+        var cdBadge=document.createElement('span');
+        cdBadge.className='cd-badge';cdBadge.textContent=T('cdMode');
+        card.appendChild(cdBadge);
+        var restBtn=document.createElement('button');
+        restBtn.className='cd-restart primary';
+        restBtn.textContent=T('cdRestart');
+        restBtn.style.display=(!t.active&&t.elapsed>=t.cdMs)?'':'none';
+        restBtn.addEventListener('click',function(e){
+          e.stopPropagation();restartCountdown(t.id);
+        });
+        card.appendChild(restBtn);
+      }
     }
 
     card.addEventListener('click',function(){toggleTimer(t.id);});
@@ -1117,7 +1300,16 @@ var Render=(function(){
       if(phEl2) phEl2.textContent=phLabel+' #'+(t.pomCount+1);
     } else {
       var tel=card.querySelector('.timer-time');
-      if(tel) tel.textContent=fmtMs(t.elapsed);
+      if(tel){
+        if(t.countdown&&t.cdMs>0){
+          var rem=Math.max(0,t.cdMs-t.elapsed);
+          tel.textContent=fmtMs(rem);
+          tel.className='timer-time'+(rem<t.cdMs*0.1?' cd-low':'');
+        } else {
+          tel.textContent=fmtMs(t.elapsed);
+          tel.className='timer-time';
+        }
+      }
     }
   }
 
@@ -1321,9 +1513,14 @@ var PiP=(function(){
     root.appendChild(nm);root.appendChild(tm);root.appendChild(ph);root.appendChild(btn);
     doc.body.appendChild(root);
     btn.addEventListener('click',function(){
-      // Toggle the active timer, or the timer this PiP was opened for
       var targetId=S.activeId||(pipTimerId&&S.timers.find(function(x){return x.id===pipTimerId;})?pipTimerId:null);
-      if(targetId) toggleTimer(targetId);
+      if(!targetId) return;
+      var tt=S.timers.find(function(x){return x.id===targetId;});
+      if(tt&&tt.countdown&&tt.cdMs>0&&!tt.active&&tt.elapsed>=tt.cdMs){
+        restartCountdown(targetId);
+      } else {
+        toggleTimer(targetId);
+      }
       update();
     });
   }
@@ -1373,14 +1570,18 @@ var PiP=(function(){
       if(t.pom){
         var total=pomTotal(t),phMs=t.elapsed-t.pomElapsed;
         timeStr=fmtMs(Math.max(0,total-phMs));
+      } else if(t.countdown&&t.cdMs>0){
+        timeStr=fmtMs(Math.max(0,t.cdMs-t.elapsed));
       } else {
         timeStr=fmtMs(t.elapsed);
       }
-      mobCtx.fillStyle=running?'#69f0ae':'#a5d6a7';
+      var cdDoneMob=t.countdown&&t.cdMs>0&&!t.active&&t.elapsed>=t.cdMs;
+      mobCtx.fillStyle=cdDoneMob?'#ff6b6b':(running?'#69f0ae':'#a5d6a7');
       mobCtx.font='bold 72px Arial,sans-serif';
       mobCtx.fillText(timeStr,W/2,145);
       // Phase / category
-      var phase=t.pom?T(t.pomPhase==='work'?'pomWork':t.pomPhase==='break'?'pomBreak':'pomLong'):t.cat;
+      var phase=t.pom?(T(t.pomPhase==='work'?'pomWork':t.pomPhase==='break'?'pomBreak':'pomLong')+' #'+(t.pomCount+1)):
+                (t.countdown&&t.cdMs>0?(cdDoneMob?T('cdDone'):T('cdMode')):t.cat);
       mobCtx.fillStyle='rgba(232,232,232,0.4)';
       mobCtx.font='18px Arial,sans-serif';
       mobCtx.fillText(phase||'',W/2,190);
@@ -1496,10 +1697,12 @@ var PiP=(function(){
       if(t.pom){
         var total=pomTotal(t),phMs=t.elapsed-t.pomElapsed;
         tmEl.textContent=fmtMs(Math.max(0,total-phMs));
-        phEl.textContent=T(t.pomPhase==='work'?'pomWork':t.pomPhase==='break'?'pomBreak':'pomLong');
+        phEl.textContent=T(t.pomPhase==='work'?'pomWork':t.pomPhase==='break'?'pomBreak':'pomLong')+' #'+(t.pomCount+1);
       } else {
-        tmEl.textContent=fmtMs(t.elapsed);
-        phEl.textContent=t.cat;
+        var cdDone=t.countdown&&t.cdMs>0&&!t.active&&t.elapsed>=t.cdMs;
+        tmEl.textContent=t.countdown&&t.cdMs>0?fmtMs(Math.max(0,t.cdMs-t.elapsed)):fmtMs(t.elapsed);
+        phEl.textContent=t.countdown&&t.cdMs>0?T('cdMode'):t.cat;
+        if(cdDone){btnEl.textContent='↺';return;}
       }
       btnEl.textContent=t.active?'⏸':'▶';
       doc.body.className=t.active?'running':'';
@@ -1556,6 +1759,10 @@ function showConfirm(msg,cb){
 function showAddTimer(){
   document.getElementById('newName').value='';
   document.getElementById('newPom').checked=false;
+  document.getElementById('newCountdown').checked=false;
+  document.getElementById('cdDurRow').style.display='none';
+  document.getElementById('cdMinutes').value='25';
+  document.getElementById('cdSeconds').value='0';
   document.getElementById('dlgAdd').showModal();
   document.getElementById('newName').focus();
 }
@@ -1619,10 +1826,11 @@ function dlBlob(content,filename,type){
 /* ══════════════════════════════════════
    INIT
 ══════════════════════════════════════ */
-function addTimer(name,cat,pom){
+function addTimer(name,cat,pom,countdown,cdMs){
   var card;
   S.timers.push({id:uid(),name:name,cat:cat,elapsed:0,active:false,lastSave:null,startTime:null,
-    pom:pom,pomPhase:'work',pomCount:0,pomElapsed:0});
+    pom:pom,pomPhase:'work',pomCount:0,pomElapsed:0,pomWorkMs:0,pomBreakMs:0,
+    countdown:!!countdown,cdMs:cdMs||0,demo:false});
   addLog(T('logAdded')+': '+name);
   checkAch();markDirty();saveAll();
   /* Add only the new card — no full re-render */
@@ -1639,6 +1847,60 @@ function addTimer(name,cat,pom){
   PiP.update();
 }
 
+function restartCountdown(id){
+  var t=S.timers.find(function(x){return x.id===id;});
+  if(!t||!t.countdown) return;
+  if(S.activeId&&S.activeId!==id) pauseActive(false);
+  t.elapsed=0;t.active=true;t.startTime=Date.now();t.lastSave=Date.now();
+  S.activeId=id;
+  var card=document.querySelector('.timer-card[data-id="'+id+'"]');
+  if(card){
+    var rb=card.querySelector('.cd-restart');if(rb)rb.style.display='none';
+    card.classList.add('active');
+    var tel=card.querySelector('.timer-time');
+    if(tel){tel.textContent=fmtMs(t.cdMs);tel.className='timer-time';}
+  }
+  addLog('↺ '+t.name);
+  markDirty();saveAll();
+  startRaf();
+  PiP.update();
+}
+
+function initRand(){
+  function showResult(el,text){
+    el.className='rand-result';
+    el.textContent=text;
+    void el.offsetWidth;
+    el.className='rand-result popped';
+  }
+  document.getElementById('randTabNum').addEventListener('click',function(){
+    this.classList.add('active');
+    document.getElementById('randTabList').classList.remove('active');
+    document.getElementById('randPanelNum').style.display='';
+    document.getElementById('randPanelList').style.display='none';
+  });
+  document.getElementById('randTabList').addEventListener('click',function(){
+    this.classList.add('active');
+    document.getElementById('randTabNum').classList.remove('active');
+    document.getElementById('randPanelNum').style.display='none';
+    document.getElementById('randPanelList').style.display='';
+  });
+  document.getElementById('randNumBtn').addEventListener('click',function(){
+    var from=parseInt(document.getElementById('randFrom').value);
+    var to=parseInt(document.getElementById('randTo').value);
+    if(isNaN(from)||isNaN(to)) return;
+    if(from>to){var tmp=from;from=to;to=tmp;}
+    showResult(document.getElementById('randNumResult'),Math.floor(Math.random()*(to-from+1))+from);
+  });
+  document.getElementById('randListBtn').addEventListener('click',function(){
+    var lines=document.getElementById('randListInput').value.split('\n')
+      .map(function(s){return s.trim();}).filter(Boolean);
+    var el=document.getElementById('randListResult');
+    if(!lines.length){showResult(el,T('randEmptyList'));return;}
+    showResult(el,lines[Math.floor(Math.random()*lines.length)]);
+  });
+}
+
 function setupFirstVisit(){
   // Returns true if this is genuinely the first open (empty storage)
   if(localStorage.getItem('schemaVersion')) return false;
@@ -1646,11 +1908,13 @@ function setupFirstVisit(){
   // Three starter timers: different categories, one with pomodoro
   var starters=[
     {id:'sv1', name:'Рабочий проект',        cat:'Работа', elapsed:4800000,
-     active:false,lastSave:null,startTime:null,pom:false,pomPhase:'work',pomCount:0,pomElapsed:0,demo:true},
-    {id:'sv2', name:'Онлайн-курс',           cat:'Учёба',  elapsed:2100000,
-     active:false,lastSave:null,startTime:null,pom:true, pomPhase:'work',pomCount:2,pomElapsed:0,pomWorkMs:3000000,pomBreakMs:600000,demo:true},
+     active:false,lastSave:null,startTime:null,pom:false,pomPhase:'work',pomCount:0,pomElapsed:0,pomWorkMs:0,pomBreakMs:0,countdown:false,cdMs:0,demo:true},
+    {id:'sv2', name:'Онлайн-курс',           cat:'Учёба',  elapsed:3900000,
+     active:false,lastSave:null,startTime:null,pom:true, pomPhase:'work',pomCount:2,pomElapsed:3600000,pomWorkMs:3000000,pomBreakMs:600000,countdown:false,cdMs:0,demo:true},
     {id:'sv3', name:'Прогулка / спорт',      cat:'Личное', elapsed:1680000,
-     active:false,lastSave:null,startTime:null,pom:false,pomPhase:'work',pomCount:0,pomElapsed:0,demo:true}
+     active:false,lastSave:null,startTime:null,pom:false,pomPhase:'work',pomCount:0,pomElapsed:0,pomWorkMs:0,pomBreakMs:0,countdown:false,cdMs:0,demo:true},
+    {id:'sv4', name:'Перерыв 5 мин',         cat:'Личное', elapsed:0,
+     active:false,lastSave:null,startTime:null,pom:false,pomPhase:'work',pomCount:0,pomElapsed:0,pomWorkMs:0,pomBreakMs:0,countdown:true,cdMs:300000,demo:true}
   ];
   localStorage.setItem('timers',        JSON.stringify(starters));
   localStorage.setItem('schemaVersion', '3');
@@ -1675,6 +1939,7 @@ function init(){
     if(instr) instr.open=true;
   }
   setInterval(saveAll,5000);
+  initRand();
 
   if(S.activeId){
     var at=S.timers.find(function(x){return x.id===S.activeId;});
@@ -1688,7 +1953,12 @@ function init(){
 
   /* ── close dialogs on backdrop click ── */
   document.querySelectorAll('dialog').forEach(function(dlg){
-    dlg.addEventListener('click',function(e){if(e.target===dlg) dlg.close();});
+    var mdOnBackdrop=false;
+    dlg.addEventListener('mousedown',function(e){mdOnBackdrop=(e.target===dlg);});
+    dlg.addEventListener('click',function(e){
+      if(e.target===dlg&&mdOnBackdrop) dlg.close();
+      mdOnBackdrop=false;
+    });
   });
   /* ── confirm dialog: clear cb on any close ── */
   document.getElementById('dlgConfirm').addEventListener('close',function(){confirmCb=null;});
@@ -1735,8 +2005,27 @@ function init(){
   document.getElementById('dlgAddOk').addEventListener('click',function(){
     var name=document.getElementById('newName').value.trim();
     if(!name) return;
+    var countdown=document.getElementById('newCountdown').checked;
+    var cdMs=0;
+    if(countdown){
+      var mins=parseInt(document.getElementById('cdMinutes').value)||0;
+      var secs=parseInt(document.getElementById('cdSeconds').value)||0;
+      cdMs=Math.max(1000,mins*60000+secs*1000);
+    }
+    var pom=!countdown&&document.getElementById('newPom').checked;
     document.getElementById('dlgAdd').close();
-    addTimer(name,document.getElementById('newCat').value,document.getElementById('newPom').checked);
+    addTimer(name,document.getElementById('newCat').value,pom,countdown,cdMs);
+  });
+  /* Pomodoro / Countdown are mutually exclusive */
+  document.getElementById('newCountdown').addEventListener('change',function(){
+    document.getElementById('cdDurRow').style.display=this.checked?'':'none';
+    if(this.checked) document.getElementById('newPom').checked=false;
+  });
+  document.getElementById('newPom').addEventListener('change',function(){
+    if(this.checked){
+      document.getElementById('newCountdown').checked=false;
+      document.getElementById('cdDurRow').style.display='none';
+    }
   });
   document.getElementById('dlgAddCancel').addEventListener('click',function(){document.getElementById('dlgAdd').close();});
   document.getElementById('newName').addEventListener('keydown',function(e){
