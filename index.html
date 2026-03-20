@@ -79,9 +79,13 @@ main{flex:1;padding:1rem;max-width:1200px;width:100%;margin:0 auto}
 /* Delete button */
 .timer-del{position:absolute;top:4px;right:4px;width:26px!important;min-width:26px!important;
   min-height:26px!important;height:26px;padding:0;font-size:.75rem;border-radius:50%;
-  opacity:0;border:none;background:var(--danger);color:#fff;transition:opacity .2s;z-index:5}
+  opacity:0;border:none;background:var(--danger);color:#fff;
+  transition:opacity .2s,transform .15s,box-shadow .15s;z-index:5}
 .timer-card:hover .timer-del{opacity:1}
 .touch-device .timer-del{opacity:1}
+.timer-del:hover:not(:disabled){background:#c62828!important;border-color:transparent!important;
+  color:#fff!important;transform:scale(1.18);
+  box-shadow:0 2px 8px rgba(198,40,40,.55)}
 
 /* Card inner elements */
 .timer-content{display:flex;flex-direction:column;align-items:center;gap:.3rem;width:100%}
@@ -1585,7 +1589,26 @@ function addTimer(name,cat,pom){
   PiP.update();
 }
 
+function setupFirstVisit(){
+  // Returns true if this is genuinely the first open (empty storage)
+  if(localStorage.getItem('schemaVersion')) return false;
+
+  // Three starter timers: different categories, one with pomodoro
+  var starters=[
+    {id:'sv1', name:'Рабочий проект',        cat:'Работа', elapsed:4800000,
+     active:false,lastSave:null,startTime:null,pom:false,pomPhase:'work',pomCount:0,pomElapsed:0},
+    {id:'sv2', name:'Онлайн-курс',           cat:'Учёба',  elapsed:2100000,
+     active:false,lastSave:null,startTime:null,pom:true, pomPhase:'work',pomCount:2,pomElapsed:0},
+    {id:'sv3', name:'Прогулка / спорт',      cat:'Личное', elapsed:1680000,
+     active:false,lastSave:null,startTime:null,pom:false,pomPhase:'work',pomCount:0,pomElapsed:0}
+  ];
+  localStorage.setItem('timers',        JSON.stringify(starters));
+  localStorage.setItem('schemaVersion', '3');
+  return true;
+}
+
 function init(){
+  var firstVisit=setupFirstVisit();
   loadAll();
   checkAch();
   applyTheme(S.prefs.theme||'light');
@@ -1596,6 +1619,11 @@ function init(){
 
   Render.renderAll();
   applyLang();
+
+  if(firstVisit){
+    var instr=document.getElementById('instructions');
+    if(instr) instr.open=true;
+  }
   setInterval(saveAll,5000);
 
   if(S.activeId){
