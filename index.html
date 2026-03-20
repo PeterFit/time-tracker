@@ -1,225 +1,1465 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            margin: 0;
-            padding: 0
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Трекер Времени</title>
+<script>/* FOUC prevention */
+(function(){
+  var p=function(){try{return JSON.parse(localStorage.getItem('preferences'))||{};}catch(e){return{};}};
+  var prefs=p();
+  if(prefs.theme==='dark') document.documentElement.setAttribute('data-theme','dark');
+  if(prefs.fontSize) document.documentElement.style.setProperty('--font-size-base',prefs.fontSize+'px');
+})();
+</script>
+<style>
+:root{
+  --bg-primary:#ffffff; --bg-secondary:#f0f0f0; --bg-card:#ffffff;
+  --text-primary:#333;  --text-secondary:#666;
+  --accent:#4caf50;     --accent-hover:#45a049;  --danger:#e53935;
+  --border:#ccc;        --shadow:0 2px 8px rgba(0,0,0,.1);
+  --font-size-base:16px; --radius:12px;
+  --pom-work:#4caf50;   --pom-break:#2196f3;  --pom-long:#9c27b0;
+}
+[data-theme="dark"]{
+  --bg-primary:#1a1a2e; --bg-secondary:#16213e; --bg-card:#0f3460;
+  --text-primary:#e0e0e0; --text-secondary:#a0a0a0;
+  --border:#444; --shadow:0 2px 8px rgba(0,0,0,.4);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:var(--font-size-base)}
+body{font-family:Arial,sans-serif;background:var(--bg-primary);color:var(--text-primary);
+  transition:background-color .3s,color .3s;min-height:100vh;display:flex;flex-direction:column}
 
-        button {
-            width: 100px;
-            height: 40px;
-            margin: 10px
-        }
+/* ── Header ── */
+header{background:var(--bg-secondary);border-bottom:1px solid var(--border);
+  padding:.6rem 1rem;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;
+  transition:background-color .3s}
+header h1{font-size:1.2rem;white-space:nowrap}
+.toolbar{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;flex:1}
+.toolbar-group{display:flex;gap:.25rem}
+.toolbar-spacer{flex:1}
 
-        .timer {
-            position: relative;
-            width: 200px;
-            height: 200px;
-            border: 5px solid #ccc;
-            border-radius: 50%;
-            display: inline-block;
-            margin: 10px;
-            cursor: pointer;
-            transition: 0.3s
-        }
+/* ── Buttons ── */
+button{min-height:44px;min-width:44px;padding:.2rem .65rem;border:1px solid var(--border);
+  border-radius:8px;background:var(--bg-card);color:var(--text-primary);cursor:pointer;
+  font-size:.85rem;transition:background-color .2s,border-color .2s,opacity .2s}
+button:hover:not(:disabled){background:var(--bg-secondary);border-color:var(--accent)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.primary:hover:not(:disabled){background:var(--accent-hover)}
+button.danger{background:var(--danger);color:#fff;border-color:var(--danger)}
 
-        .timer:hover {
-            opacity: 0.7
-        }
+/* ── Main ── */
+main{flex:1;padding:1rem;max-width:1200px;width:100%;margin:0 auto}
 
-        .name, .time {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center
-        }
+/* ── Category filter ── */
+.cat-filter-row{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:1rem}
+.cat-filter{display:flex;gap:.4rem;flex-wrap:wrap;flex:1}
+.cat-btn{min-height:30px;padding:.15rem .55rem;border-radius:16px;font-size:.78rem;min-width:unset}
+.cat-manage-btn{min-height:30px;min-width:30px;padding:.15rem .45rem;font-size:.78rem}
 
-        .time {
-            top: 60%
-        }
+/* ── Timer grid ── */
+.timer-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+  gap:1rem;margin-bottom:1.5rem}
 
-        .container, textarea {
-            max-width: 100%;
-            box-sizing: border-box;
-        }
+/* ── Timer card ── */
+.timer-card{position:relative;background:var(--bg-card);border:2px solid var(--border);
+  border-radius:var(--radius);padding:.9rem .75rem;cursor:pointer;
+  transition:border-color .3s,box-shadow .2s,background-color .2s;
+  user-select:none;display:flex;flex-direction:column;align-items:center;gap:.45rem;
+  min-height:120px;box-shadow:var(--shadow);touch-action:pan-y}
+.timer-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.18)}
+.timer-card.active{border-color:var(--accent);animation:pulse 2s ease-in-out infinite}
+.timer-card.card-new{animation:fadeIn .3s ease}
+.timer-card.deleting{animation:fadeOut .28s ease forwards}
 
-        textarea {
-            width: 100%;
-            margin-bottom: 20px;
-        }
+/* Delete button */
+.timer-del{position:absolute;top:4px;right:4px;width:26px!important;min-width:26px!important;
+  min-height:26px!important;height:26px;padding:0;font-size:.75rem;border-radius:50%;
+  opacity:0;border:none;background:var(--danger);color:#fff;transition:opacity .2s;z-index:5}
+.timer-card:hover .timer-del{opacity:1}
+.touch-device .timer-del{opacity:1}
 
-        .instructions {
-            margin: 20px;
-        }
+/* Card inner elements */
+.timer-content{display:flex;flex-direction:column;align-items:center;gap:.3rem;width:100%}
+.timer-name{font-weight:bold;text-align:center;word-break:break-word;font-size:.88rem;line-height:1.3}
+.timer-time{font-size:1.1rem;font-weight:bold;font-variant-numeric:tabular-nums}
+.timer-cat{font-size:.7rem;padding:.1rem .4rem;border-radius:8px;color:#fff;white-space:nowrap}
 
-        @media only screen and (max-width: 600px) {
-            .timer {
-                width: 150px;
-                height: 150px;
-            }
+/* ── Pomodoro ring ── */
+.pom-ring{position:relative;width:68px;height:68px;flex-shrink:0}
+.pom-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring-bg{fill:none;stroke:var(--border);stroke-width:5}
+.ring-prog{fill:none;stroke-width:5;stroke-linecap:round;transition:stroke-dashoffset .4s,stroke .3s}
+.pom-time{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-size:.72rem;font-weight:bold;white-space:nowrap}
+.pom-phase{font-size:.65rem;color:var(--text-secondary);text-align:center}
 
-            button {
-                width: 80px;
-                height: 30px;
-                font-size: 14px;
-            }
+/* ── Notebook ── */
+.nb-section{margin-bottom:1.5rem}
+.nb-section label{display:block;font-weight:bold;margin-bottom:.5rem}
+#notebook{width:100%;min-height:90px;padding:.65rem;border:1px solid var(--border);
+  border-radius:8px;background:var(--bg-card);color:var(--text-primary);font-size:.9rem;
+  resize:vertical;transition:background-color .3s,border-color .2s}
+#notebook:focus{outline:none;border-color:var(--accent)}
 
-            textarea {
-                font-size: 14px;
-            }
-        }
-    </style>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+/* ── Collapsible sections ── */
+details{margin-bottom:1rem;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+details summary{padding:.65rem 1rem;background:var(--bg-secondary);cursor:pointer;
+  font-weight:bold;list-style:none;display:flex;align-items:center;gap:.5rem;
+  transition:background-color .3s;user-select:none}
+details summary::-webkit-details-marker{display:none}
+details summary::before{content:'▶';font-size:.65rem;transition:transform .2s}
+details[open] summary::before{transform:rotate(90deg)}
+.det-body{padding:1rem}
+
+/* ── Stats ── */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:.75rem;margin-bottom:1rem}
+.stat-card{background:var(--bg-secondary);border-radius:8px;padding:.85rem;text-align:center}
+.stat-val{font-size:1.4rem;font-weight:bold;color:var(--accent)}
+.stat-lbl{font-size:.75rem;color:var(--text-secondary)}
+.chart-title{font-weight:bold;margin-bottom:.5rem;font-size:.9rem}
+.bar-chart{display:flex;align-items:flex-end;gap:4px;height:90px;margin-bottom:.75rem}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+  height:100%;justify-content:flex-end}
+.bar{width:100%;border-radius:4px 4px 0 0;min-height:2px;background:var(--accent)}
+.bar-lbl{font-size:.6rem;color:var(--text-secondary)}
+.export-row{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem}
+
+/* ── Activity log ── */
+.act-list{list-style:none;max-height:180px;overflow-y:auto}
+.act-list li{padding:.2rem 0;font-size:.78rem;border-bottom:1px solid var(--border);
+  color:var(--text-secondary)}
+
+/* ── Footer ── */
+footer{background:var(--bg-secondary);border-top:1px solid var(--border);padding:.65rem 1rem;
+  text-align:center;font-size:.8rem;color:var(--text-secondary);display:flex;
+  align-items:center;justify-content:center;gap:1rem;flex-wrap:wrap;transition:background-color .3s}
+footer a{color:var(--accent);text-decoration:none}
+footer a:hover{text-decoration:underline}
+.gamif-row{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.streak{display:flex;align-items:center;gap:.25rem;font-size:.82rem}
+.ach-list{display:flex;gap:.25rem;flex-wrap:wrap}
+.gamif-toggle{min-height:unset;min-width:unset;height:24px;padding:0 .35rem;
+  font-size:.78rem;border:1px solid var(--border);border-radius:6px;
+  background:none;color:var(--text-secondary);opacity:.6;transition:opacity .15s}
+.gamif-toggle:hover{opacity:1;background:var(--bg-secondary)}
+.ach{padding:.1rem .4rem;border-radius:8px;background:var(--bg-card);
+  border:1px solid var(--border);font-size:.72rem;cursor:default}
+.ach-toast{position:fixed;bottom:1.5rem;right:1.5rem;
+  background:var(--accent);color:#fff;
+  padding:.55rem 1rem;border-radius:12px;font-size:.85rem;font-weight:600;
+  box-shadow:0 4px 16px rgba(0,0,0,.25);pointer-events:none;z-index:9999;
+  animation:toastIn .3s ease,toastOut .3s ease 2.7s forwards}
+@keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes toastOut{from{opacity:1}to{opacity:0}}
+
+/* ── Dialogs ── */
+dialog{
+  background:var(--bg-card);color:var(--text-primary);
+  border:none;border-radius:20px;padding:0;
+  max-width:420px;width:92%;overflow:hidden;
+  box-shadow:0 24px 64px rgba(0,0,0,.4),0 4px 16px rgba(0,0,0,.2);
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0}
+dialog[open]{animation:dlgIn .22s cubic-bezier(.34,1.4,.64,1)}
+dialog::backdrop{
+  background:rgba(0,0,0,.55);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  animation:backdropIn .2s ease}
+@keyframes dlgIn{
+  from{opacity:0;transform:translate(-50%,calc(-50% + 18px)) scale(.95)}
+  to  {opacity:1;transform:translate(-50%,-50%) scale(1)}}
+@keyframes backdropIn{from{opacity:0}to{opacity:1}}
+.dlg-title{font-size:1.05rem;font-weight:700;
+  padding:1.2rem 1.4rem .85rem;border-bottom:1px solid var(--border)}
+.dlg-body{display:flex;flex-direction:column;gap:.65rem;padding:1rem 1.4rem}
+.dlg-body label{font-size:.82rem;color:var(--text-secondary);margin-bottom:.15rem;display:block}
+.dlg-body input[type=text],.dlg-body input[type=number],.dlg-body select{
+  width:100%;padding:.5rem .7rem;border:1px solid var(--border);
+  border-radius:10px;background:var(--bg-primary);color:var(--text-primary);font-size:.88rem;
+  transition:border-color .15s,box-shadow .15s}
+.dlg-body input:focus,.dlg-body select:focus{
+  outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(76,175,80,.18)}
+.dlg-check{display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.88rem}
+.dlg-check input[type=checkbox]{width:auto;cursor:pointer}
+.dlg-actions{display:flex;gap:.5rem;justify-content:flex-end;padding:.75rem 1.4rem 1.1rem}
+.setting-row{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+.setting-row label{font-size:.85rem}
+.setting-row input[type=number]{width:70px}
+
+/* ── Category management dialog ── */
+.cat-list-item{display:flex;align-items:center;gap:.5rem;padding:.3rem 0;
+  border-bottom:1px solid var(--border)}
+.cat-color-dot,.cat-list-item .cat-color-dot{width:14px;height:14px;border-radius:50%;flex:none;display:block}
+.cat-list-item span{flex:1;font-size:.88rem}
+.cat-list-item button{min-height:28px;min-width:28px;height:28px;padding:0;font-size:.75rem}
+.cat-add-row{display:flex;gap:.4rem;margin-top:.75rem;align-items:center}
+.cat-add-row input[type=text]{flex:1;padding:.4rem .55rem;border:1px solid var(--border);
+  border-radius:8px;background:var(--bg-primary);color:var(--text-primary);font-size:.85rem}
+.cat-add-row input[type=text]:focus{outline:none;border-color:var(--accent)}
+.cat-add-row input[type=color]{width:36px;height:36px;border:1px solid var(--border);
+  border-radius:50%;padding:2px;cursor:pointer;background:none;flex-shrink:0;
+  -webkit-appearance:none;overflow:hidden}
+.cat-add-row input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+.cat-add-row input[type=color]::-webkit-color-swatch{border:none;border-radius:50%}
+
+/* ── Instructions ── */
+.det-body ol{padding-left:1.4rem}
+.det-body li{margin-bottom:.5rem;font-size:.88rem;line-height:1.5}
+
+/* ── Animations ── */
+@keyframes fadeIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+@keyframes fadeOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.94)}}
+@keyframes pulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(76,175,80,.4)}
+  50%{box-shadow:0 0 0 9px rgba(76,175,80,0)}
+}
+
+/* ── Mobile ── */
+@media(max-width:480px){
+  header h1{font-size:1rem}
+  .timer-grid{grid-template-columns:1fr}
+  .timer-card{flex-direction:row;min-height:68px;padding:.6rem .75rem;gap:.6rem;align-items:center}
+  .timer-card.active{animation:pulse 2s ease-in-out infinite}
+  .timer-content{align-items:flex-start;text-align:left;flex:1}
+  .timer-name{text-align:left}
+  .timer-time{margin-left:auto;font-size:1rem}
+  .pom-ring{width:52px;height:52px}
+  .timer-del{opacity:1!important}
+}
+</style>
 </head>
 <body>
-<button id="addBtn">Add</button>
-<button id="pauseBtn">Pause</button>
-<button id="resetBtn">Reset</button>
-<div id="container"></div>
-<textarea id="notebook" placeholder="Записная книжка"></textarea>
 
+<header>
+  <h1 data-i18n="appTitle">⏱ Трекер Времени</h1>
+  <nav class="toolbar" role="toolbar">
+    <div class="toolbar-group">
+      <button id="addBtn"   data-i18n="addBtn">+ Добавить</button>
+      <button id="pauseBtn" data-i18n="pauseBtn">⏸ Пауза</button>
+      <button id="resetBtn" data-i18n="resetBtn">↺ Сбросить</button>
+    </div>
+    <div class="toolbar-group">
+      <button id="themeBtn">🌙</button>
+      <button id="fontDec">A−</button>
+      <button id="fontInc">A+</button>
+      <button id="soundBtn">🔊</button>
+      <button id="pomBtn">🍅</button>
+    </div>
+    <div class="toolbar-spacer"></div>
+    <div class="toolbar-group">
+      <button id="langBtn" title="Switch language / Переключить язык">🌐 RU</button>
+    </div>
+  </nav>
+</header>
 
-<div id="instructions">
-    <h2>Инструкция по работе с программой таймера:</h2>
-    <ol style="text-align: left">
-        <li><b>Добавление таймера:</b> Чтобы добавить таймер, нажмите кнопку "Add". В появившемся окне введите название таймера и нажмите "OK". Таймер появится на экране с указанным названием и временем "0:00".</li>
-        <li><b>Активация таймера:</b> Чтобы активировать таймер, нажмите на кружок с названием таймера. Активный таймер будет зеленым, и его время начнет увеличиваться. Если активировать другой таймер, предыдущий автоматически станет неактивным и его время остановится.</li>
-        <li><b>Пауза:</b> Чтобы приостановить все таймеры, нажмите кнопку "Pause". Все таймеры приостановятся, и их время останется на месте.</li>
-        <li><b>Сброс:</b> Чтобы сбросить все таймеры, нажмите кнопку "Reset". Время всех таймеров вернется к "0:00".</li>
-        <li><b>Записная книжка:</b> Используйте поле "Записная книжка" для ввода заметок или информации о вашей работе. Все данные будут сохраняться в localstorage и восстанавливаться при перезагрузке страницы.</li>
-    </ol>
-</div>
+<main>
+  <div class="cat-filter-row">
+    <div class="cat-filter" id="catFilter" role="group"></div>
+    <button class="cat-manage-btn" id="manageCatsBtn" data-i18n="manageCatsBtn">⚙ Категории</button>
+  </div>
+  <section class="timer-grid" id="timerGrid" role="list"></section>
 
-<script>$("#addBtn").click(() => {
-    const n = prompt("Enter name:");
-    if (n) {
-        const d = $("<div>").addClass("timer").click(l).contextmenu(r).appendTo("#container");
-        $.data(d[0], "timer", {timerName: n, startTime: null, elapsedTime: 0, active: false});
-        $("<div>").addClass("name").text(n).appendTo(d);
-        $("<div>").addClass("time").text("0:00").appendTo(d);
-        saveTimers()
-    }
-});
-$("#pauseBtn").click(p);
-$("#resetBtn").click(function () {
-    if (confirm("Вы уверены, что хотите сбросить все таймеры?")) {
-        s()
-    }
-});
+  <section class="nb-section">
+    <label for="notebook" data-i18n="notebookLabel">📝 Записная книжка</label>
+    <textarea id="notebook" data-i18n-ph="notebookPh"></textarea>
+  </section>
 
-function l() {
-    const data = $.data(this, "timer");
-    if (data.active) {
-        p()
-    } else {
-        p();
-        data.active = true;
-        data.startTime = Date.now() - data.elapsedTime;
-        this.style.borderColor = "green";
-        a = this;
-        u(a);
-        saveTimers()
-    }
+  <details id="statsSection">
+    <summary data-i18n="statsTitle">📊 Статистика</summary>
+    <div class="det-body">
+      <div class="stats-grid" id="statsGrid"></div>
+      <div class="chart-title" data-i18n="last7days">Последние 7 дней</div>
+      <div class="bar-chart" id="weekChart"></div>
+      <div class="export-row">
+        <button id="exportCsv" data-i18n="exportCsv">📄 CSV</button>
+        <button id="exportJson" data-i18n="exportJson">📦 JSON</button>
+      </div>
+    </div>
+  </details>
+
+  <details id="actSection">
+    <summary data-i18n="actTitle">📋 Лог активности</summary>
+    <div class="det-body">
+      <ul class="act-list" id="actList"></ul>
+    </div>
+  </details>
+
+  <details id="instructions">
+    <summary data-i18n="instrTitle">❓ Инструкция</summary>
+    <div class="det-body" id="instrBody"></div>
+  </details>
+</main>
+
+<footer>
+  <span>
+    <a href="https://github.com/PeterFit/gpt-time-tracker" target="_blank" rel="noopener">GitHub</a> |
+    <a href="https://t.me/peterfit" target="_blank" rel="noopener">Telegram</a>
+  </span>
+  <span class="gamif-row" id="gamifRow">
+    <span class="streak" id="streakEl"></span>
+    <div class="ach-list" id="achList"></div>
+  </span>
+  <button class="gamif-toggle" id="gamifToggle" title="Скрыть достижения">🏅</button>
+</footer>
+
+<!-- ── Dialogs ── -->
+<dialog id="dlgAdd" aria-modal="true">
+  <div class="dlg-title" data-i18n="dlgAddTitle">Новый таймер</div>
+  <div class="dlg-body">
+    <div>
+      <label for="newName" data-i18n="dlgAddName">Название</label>
+      <input type="text" id="newName" maxlength="50" autocomplete="off">
+    </div>
+    <div>
+      <label for="newCat" data-i18n="dlgAddCat">Категория</label>
+      <select id="newCat"></select>
+    </div>
+    <label class="dlg-check">
+      <input type="checkbox" id="newPom">
+      <span data-i18n="dlgAddPom">Режим Помодоро</span>
+    </label>
+  </div>
+  <div class="dlg-actions">
+    <button type="button" id="dlgAddCancel" data-i18n="cancel">Отмена</button>
+    <button type="button" id="dlgAddOk" class="primary" data-i18n="dlgAddOk">Добавить</button>
+  </div>
+</dialog>
+
+<dialog id="dlgConfirm" aria-modal="true">
+  <div class="dlg-title" data-i18n="confirm">Подтверждение</div>
+  <div class="dlg-body"><p id="dlgConfirmMsg"></p></div>
+  <div class="dlg-actions">
+    <button type="button" id="dlgConfirmCancel" data-i18n="cancel">Отмена</button>
+    <button type="button" id="dlgConfirmOk" class="danger" data-i18n="ok">ОК</button>
+  </div>
+</dialog>
+
+<dialog id="dlgPom" aria-modal="true">
+  <div class="dlg-title" data-i18n="dlgPomTitle">Настройки Помодоро 🍅</div>
+  <div class="dlg-body">
+    <div class="setting-row"><label data-i18n="dlgPomWork">Работа (мин)</label><input type="number" id="pomWork" min="1" max="90"></div>
+    <div class="setting-row"><label data-i18n="dlgPomBreak">Короткий перерыв (мин)</label><input type="number" id="pomBreak" min="1" max="30"></div>
+    <div class="setting-row"><label data-i18n="dlgPomLong">Длинный перерыв (мин)</label><input type="number" id="pomLong" min="1" max="60"></div>
+  </div>
+  <div class="dlg-actions">
+    <button type="button" id="dlgPomCancel" data-i18n="cancel">Отмена</button>
+    <button type="button" id="dlgPomOk" class="primary" data-i18n="save">Сохранить</button>
+  </div>
+</dialog>
+
+<dialog id="dlgCats" aria-modal="true">
+  <div class="dlg-title" data-i18n="dlgCatsTitle">Категории</div>
+  <div class="dlg-body" style="max-height:280px;overflow-y:auto">
+    <div id="catMgmtList"></div>
+    <div class="cat-add-row">
+      <input type="text" id="newCatName" maxlength="30">
+      <input type="color" id="newCatColor" value="#4caf50">
+      <button type="button" id="addCatBtn" class="primary" data-i18n="add">+ Добавить</button>
+    </div>
+  </div>
+  <div class="dlg-actions">
+    <button type="button" id="dlgCatsClose" class="primary" data-i18n="close">Закрыть</button>
+  </div>
+</dialog>
+
+<script>
+(function(){'use strict';
+
+/* ══════════════════════════════════════
+   I18N
+══════════════════════════════════════ */
+var STRINGS={
+  ru:{
+    appTitle:'⏱ Трекер Времени',
+    addBtn:'+ Добавить', pauseBtn:'⏸ Пауза', resetBtn:'↺ Сбросить',
+    manageCatsBtn:'⚙ Категории',
+    notebookLabel:'📝 Записная книжка', notebookPh:'Введите заметки…',
+    statsTitle:'📊 Статистика', actTitle:'📋 Лог активности',
+    instrTitle:'❓ Инструкция', last7days:'Последние 7 дней',
+    exportCsv:'📄 CSV', exportJson:'📦 JSON',
+    dlgAddTitle:'Новый таймер', dlgAddName:'Название', dlgAddCat:'Категория',
+    dlgAddPom:'Режим Помодоро', dlgAddOk:'Добавить',
+    dlgPomTitle:'Настройки Помодоро 🍅',
+    dlgPomWork:'Работа (мин)', dlgPomBreak:'Короткий перерыв (мин)', dlgPomLong:'Длинный перерыв (мин)',
+    dlgCatsTitle:'Категории',
+    cancel:'Отмена', ok:'ОК', save:'Сохранить', add:'+ Добавить', close:'Закрыть', confirm:'Подтверждение',
+    statSum:'Сумма таймеров', statCount:'Таймеров', statActive:'Активный', statStreak:'Дней подряд',
+    pomWork:'Работа', pomBreak:'Пауза', pomLong:'Дл. пауза',
+    allCats:'Все',
+    confirmReset:'Удалить все таймеры?',
+    confirmDelete:'Удалить таймер',
+    newCatPlaceholder:'Название категории',
+    logStarted:'Запущена', logStopped:'Остановлена', logDeleted:'Удалена',
+    logAdded:'Добавлена', logReset:'Все таймеры удалены', logPomDone:'Помодоро фаза завершена',
+    achUnlocked:'🏅 Достижение разблокировано',
+    hideGamif:'Скрыть достижения', showGamif:'Показать достижения',
+    streakDays:'дн.',
+    ach_first_timer:'🎯 Первый таймер',
+    ach_five_timers:'📌 Пять таймеров',
+    ach_one_hour:'⏰ Час работы',
+    ach_ten_hours:'⏱ Десять часов',
+    ach_hundred_hours:'🏆 Сто часов',
+    ach_pom_first:'🍅 Первое Помодоро',
+    ach_pom_ten:'🍅🍅 Десять Помодоро',
+    ach_three_streak:'🔥 3 дня подряд',
+    ach_week_streak:'🔥 Неделя подряд',
+    ach_month_streak:'🌟 Месяц подряд',
+    ach_notebook_user:'📝 Записная книжка',
+    ach_exporter:'📤 Экспорт данных',
+    instr:[
+      '<b>Добавить таймер:</b> Кнопка «+ Добавить» или клавиша <kbd>N</kbd>.',
+      '<b>Запуск/пауза:</b> Нажмите на карточку. Повторное нажатие — пауза.',
+      '<b>Глобальная пауза:</b> Кнопка «⏸ Пауза» или <kbd>Space</kbd>.',
+      '<b>Удаление:</b> Наведите — появится ✕. На мобильном — всегда видна. Свайп влево тоже удаляет.',
+      '<b>Категории:</b> Кнопка ⚙ Катег. — добавить/удалить категории.',
+      '<b>Помодоро:</b> При создании включите режим — кольцо и звуковые уведомления.',
+      '<b>Горячие клавиши:</b> N — новый, Space — пауза, T — тема, +/− — шрифт, 1–9 — таймер, Del — удалить.',
+      '<b>Достижения:</b> 12 наград за активность — за время работы, серии дней, Помодоро, экспорт, заметки. Уведомление появляется при разблокировке.'
+    ]
+  },
+  en:{
+    appTitle:'⏱ Time Tracker',
+    addBtn:'+ Add', pauseBtn:'⏸ Pause', resetBtn:'↺ Reset',
+    manageCatsBtn:'⚙ Categories',
+    notebookLabel:'📝 Notebook', notebookPh:'Enter notes…',
+    statsTitle:'📊 Statistics', actTitle:'📋 Activity Log',
+    instrTitle:'❓ Help', last7days:'Last 7 days',
+    exportCsv:'📄 CSV', exportJson:'📦 JSON',
+    dlgAddTitle:'New Timer', dlgAddName:'Name', dlgAddCat:'Category',
+    dlgAddPom:'Pomodoro Mode', dlgAddOk:'Add',
+    dlgPomTitle:'Pomodoro Settings 🍅',
+    dlgPomWork:'Work (min)', dlgPomBreak:'Short break (min)', dlgPomLong:'Long break (min)',
+    dlgCatsTitle:'Categories',
+    cancel:'Cancel', ok:'OK', save:'Save', add:'+ Add', close:'Close', confirm:'Confirm',
+    statSum:'Total time', statCount:'Timers', statActive:'Active', statStreak:'Day streak',
+    pomWork:'Work', pomBreak:'Break', pomLong:'Long break',
+    allCats:'All',
+    confirmReset:'Delete all timers?',
+    confirmDelete:'Delete timer',
+    newCatPlaceholder:'Category name',
+    logStarted:'Started', logStopped:'Stopped', logDeleted:'Deleted',
+    logAdded:'Added', logReset:'All timers deleted', logPomDone:'Pomodoro phase done',
+    achUnlocked:'🏅 Achievement unlocked',
+    hideGamif:'Hide achievements', showGamif:'Show achievements',
+    streakDays:'d.',
+    ach_first_timer:'🎯 First timer',
+    ach_five_timers:'📌 Five timers',
+    ach_one_hour:'⏰ One hour',
+    ach_ten_hours:'⏱ Ten hours',
+    ach_hundred_hours:'🏆 Hundred hours',
+    ach_pom_first:'🍅 First Pomodoro',
+    ach_pom_ten:'🍅🍅 Ten Pomodoros',
+    ach_three_streak:'🔥 3-day streak',
+    ach_week_streak:'🔥 Week streak',
+    ach_month_streak:'🌟 Month streak',
+    ach_notebook_user:'📝 Notebook user',
+    ach_exporter:'📤 Data exported',
+    instr:[
+      '<b>Add timer:</b> Click «+ Add» or press <kbd>N</kbd>.',
+      '<b>Start/pause:</b> Click the card. Click again to pause.',
+      '<b>Global pause:</b> «⏸ Pause» button or <kbd>Space</kbd>.',
+      '<b>Delete:</b> Hover to reveal ✕. On mobile always visible. Swipe left also deletes.',
+      '<b>Categories:</b> ⚙ Cats button — add/delete categories.',
+      '<b>Pomodoro:</b> Enable at creation — countdown ring + sounds.',
+      '<b>Shortcuts:</b> N — add, Space — pause, T — theme, +/− — font, 1–9 — timer, Del — delete.',
+      '<b>Achievements:</b> 12 awards for activity — time tracked, streaks, Pomodoro, export, notebook. A toast appears on unlock.'
+    ]
+  }
+};
+function T(key){var l=S&&S.prefs?S.prefs.lang||'ru':'ru';return(STRINGS[l]&&STRINGS[l][key])||STRINGS.ru[key]||key;}
+
+/* SVG flags as data URIs (inline, no external deps) */
+var FLAG={
+  ru:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 20'%3E%3Crect width='30' height='20' fill='%23D52B1E'/%3E%3Crect width='30' height='13.3' fill='%230039A6'/%3E%3Crect width='30' height='6.67' fill='%23fff'/%3E%3C/svg%3E",
+  en:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 30'%3E%3Crect width='60' height='30' fill='%23012169'/%3E%3Cpath d='M0,0L60,30M0,30L60,0' stroke='%23fff' stroke-width='6'/%3E%3Cpath d='M0,0L60,30M0,30L60,0' stroke='%23C8102E' stroke-width='4'/%3E%3Crect x='25' width='10' height='30' fill='%23fff'/%3E%3Crect y='10' width='60' height='10' fill='%23fff'/%3E%3Crect x='27' width='6' height='30' fill='%23C8102E'/%3E%3Crect y='12' width='60' height='6' fill='%23C8102E'/%3E%3C/svg%3E"
+};
+
+function applyLang(){
+  var lang=S.prefs.lang||'ru';
+  document.documentElement.setAttribute('lang',lang);
+  document.title=STRINGS[lang].appTitle.replace(/[⏱\s]/g,'').trim()||'Time Tracker';
+  document.querySelectorAll('[data-i18n]').forEach(function(el){
+    var k=el.getAttribute('data-i18n');
+    var s=STRINGS[lang][k];
+    if(s!==undefined) el.textContent=s;
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach(function(el){
+    var k=el.getAttribute('data-i18n-ph');
+    var s=STRINGS[lang][k];
+    if(s!==undefined) el.setAttribute('placeholder',s);
+  });
+  // Update new cat placeholder
+  var ncn=document.getElementById('newCatName');
+  if(ncn) ncn.setAttribute('placeholder',T('newCatPlaceholder'));
+  // Instructions
+  var ib=document.getElementById('instrBody');
+  if(ib){
+    ib.innerHTML='<ol>'+STRINGS[lang].instr.map(function(s){return'<li>'+s+'</li>';}).join('')+'</ol>';
+  }
+  // Lang button: flag SVG + code
+  var lb=document.getElementById('langBtn');
+  if(lb) lb.innerHTML='<img src="'+FLAG[lang]+'" width="20" height="13" alt="" style="vertical-align:middle;border-radius:2px;margin-right:3px">'+(lang==='ru'?'RU':'EN');
+  // Refresh all dynamic sections
+  Render.renderCatFilter();
+  Render.renderStats();
+  Render.renderFooter();
+  Render.renderLog();
+  markDirty();saveAll();
 }
 
-function r(e) {
-    e.preventDefault();
-    const data = $.data(this, "timer");
-    if (confirm(`Are you sure you want to delete '${data.timerName}' timer?`)) {
-        $(this).remove();
-        saveTimers()
-    }
+/* ══════════════════════════════════════
+   UTILS
+══════════════════════════════════════ */
+function uid(){
+  try{return crypto.randomUUID();}
+  catch(e){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
 }
-
-function p() {
-    if (a) {
-        a.style.borderColor = "#ccc";
-        $.data(a, "timer").active = false;
-        a = null;
-        saveTimers()
-    }
+function fmtMs(ms){
+  var s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;
+  if(h>0) return h+':'+pad(m)+':'+pad(sec);
+  return m+':'+pad(sec);
 }
-
-function s() {
-    $("#container").empty();
-    saveTimers()
+function fmtShort(ms){
+  var s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60);
+  if(h>0) return h+(S.prefs.lang==='en'?'h ':' ч ')+m+(S.prefs.lang==='en'?'m':' м');
+  return m+(S.prefs.lang==='en'?'m':' м');
 }
+function pad(n){return String(n).padStart(2,'0');}
+function today(){return new Date().toISOString().split('T')[0];}
 
-function u(d) {
-    const data = $.data(d, "timer");
-    const m = Math.floor(data.elapsedTime / 6e4);
-    const s = Math.floor((data.elapsedTime % 6e4) / 1e3);
-    $(d).find(".time").text(`${m}:${String(s).padStart(2, "0")}`)
-}
+/* ══════════════════════════════════════
+   STATE
+══════════════════════════════════════ */
+var DEF_PREFS={theme:'light',fontSize:16,sound:true,pomWork:25,pomBreak:5,pomLong:15,lang:'ru',showGamif:true};
+var DEF_CATS=[
+  {name:'Работа',color:'#4caf50'},{name:'Учёба',color:'#2196f3'},
+  {name:'Личное',color:'#ff9800'},{name:'Другое',color:'#9e9e9e'}
+];
+var S={
+  timers:[],activeId:null,
+  prefs:Object.assign({},DEF_PREFS),
+  notebook:'',
+  cats:DEF_CATS.map(function(c){return Object.assign({},c);}),
+  history:[],log:[],
+  streaks:{lastDate:null,cur:0,best:0,ach:[],exported:false,nbWritten:false},
+  filterCat:null
+};
 
-function d() {
-    if (a && $.data(a, "timer").active) {
-        const data = $.data(a, "timer");
-        data.elapsedTime = Date.now() - data.startTime;
-        u(a);
-    }
-    requestAnimationFrame(d)
-}
+/* ══════════════════════════════════════
+   STORAGE  — FIX: read t.elapsed (not t.elapsedTime)
+══════════════════════════════════════ */
+var dirty=false;
+function markDirty(){dirty=true;}
 
-let a = null;
-requestAnimationFrame(d);
-
-function saveTimers() {
-    const timers = [];
-    $(".timer").each((i, e) => {
-        const data = $.data(e, "timer");
-        timers.push({
-            timerName: data.timerName,
-            startTime: data.startTime,
-            elapsedTime: data.elapsedTime,
-            active: false
-        })
+function saveAll(){
+  if(!dirty) return;
+  try{
+    var timers=S.timers.map(function(t){
+      if(t.active) return Object.assign({},t,{lastSave:Date.now()});
+      return Object.assign({},t);
     });
-    localStorage.setItem("timers", JSON.stringify(timers))
+    localStorage.setItem('timers',JSON.stringify(timers));
+    localStorage.setItem('preferences',JSON.stringify(S.prefs));
+    localStorage.setItem('notebookContent',S.notebook);
+    localStorage.setItem('categories',JSON.stringify(S.cats));
+    var cut=Date.now()-90*864e5;
+    S.history=S.history.filter(function(h){return new Date(h.date).getTime()>cut;});
+    localStorage.setItem('timerHistory',JSON.stringify(S.history));
+    if(S.log.length>200) S.log=S.log.slice(-200);
+    localStorage.setItem('activityLog',JSON.stringify(S.log));
+    localStorage.setItem('streaks',JSON.stringify(S.streaks));
+    localStorage.setItem('schemaVersion','3');
+    dirty=false;
+  }catch(e){console.error('save:',e);}
 }
 
-function loadTimers() {
-    const storedTimers = JSON.parse(localStorage.getItem("timers"));
-    if (storedTimers) {
-        storedTimers.forEach(t => {
-            const d = $("<div>").addClass("timer").click(l).contextmenu(r).appendTo("#container");
-            $.data(d[0], "timer", {
-                timerName: t.timerName,
-                startTime: t.startTime,
-                elapsedTime: t.elapsedTime,
-                active: false
-            });
-            $("<div>").addClass("name").text(t.timerName).appendTo(d);
-            const m = Math.floor(t.elapsedTime / 6e4);
-            const s = Math.floor((t.elapsedTime % 6e4) / 1e3);
-            $("<div>").addClass("time").text(`${m}:${String(s).padStart(2, "0")}`).appendTo(d)
-        })
+function loadAll(){
+  try{
+    var raw=localStorage.getItem('timers');
+    if(raw){
+      var arr=JSON.parse(raw);
+      S.timers=arr.map(function(t){
+        if(!t.id){t.id=uid();markDirty();}
+        /* FIX: field is 'elapsed', legacy might have 'elapsedTime' */
+        var elapsed=t.elapsed||t.elapsedTime||0;
+        if(t.active&&t.lastSave) elapsed+=(Date.now()-t.lastSave);
+        return{
+          id:t.id,
+          name:t.timerName||t.name||'Timer',
+          cat:t.cat||t.category||'Другое',
+          elapsed:elapsed,
+          active:t.active||false,
+          lastSave:t.active?Date.now():null,
+          startTime:t.active?(Date.now()-elapsed):null,
+          pom:t.pom||t.pomodoroMode||false,
+          pomPhase:t.pomPhase||t.pomodoroPhase||'work',
+          pomCount:t.pomCount||t.pomodoroCount||0,
+          pomElapsed:t.pomElapsed||t.pomodoroElapsed||0
+        };
+      });
+      var act=S.timers.find(function(t){return t.active;});
+      if(act) S.activeId=act.id;
     }
+    var p=localStorage.getItem('preferences');
+    if(p) S.prefs=Object.assign({},DEF_PREFS,JSON.parse(p));
+    var nb=localStorage.getItem('notebookContent');
+    if(nb!==null) S.notebook=nb;
+    var cats=localStorage.getItem('categories');
+    if(cats) S.cats=JSON.parse(cats);
+    var hist=localStorage.getItem('timerHistory');
+    if(hist) S.history=JSON.parse(hist);
+    var log=localStorage.getItem('activityLog');
+    if(log) S.log=JSON.parse(log);
+    var str=localStorage.getItem('streaks');
+    if(str) S.streaks=Object.assign({exported:false,nbWritten:false},JSON.parse(str));
+  }catch(e){console.error('load:',e);}
 }
 
-loadTimers();
-setInterval(saveTimers, 1000);
-
-$("#notebook").on("input", function () {
-    localStorage.setItem("notebookContent", $(this).val());
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden){dirty=true;saveAll();}
+  else{
+    Sounds.resume();
+    if(S.activeId){
+      var t=S.timers.find(function(x){return x.id===S.activeId;});
+      if(t&&t.active&&t.startTime){
+        t.elapsed=Date.now()-t.startTime;
+        if(t.pom) checkPomPhase(t);
+        if(!rafRunning) startRaf();
+      }
+    }
+  }
 });
+window.addEventListener('beforeunload',function(){dirty=true;saveAll();});
 
-function loadNotebook() {
-    const storedNotebookContent = localStorage.getItem("notebookContent");
-    if (storedNotebookContent) {
-        $("#notebook").val(storedNotebookContent);
+/* ══════════════════════════════════════
+   SOUNDS
+══════════════════════════════════════ */
+var Sounds=(function(){
+  var ctx=null;
+  function getCtx(){
+    if(!ctx) try{ctx=new(window.AudioContext||window.webkitAudioContext)();}catch(e){}
+    return ctx;
+  }
+  function beep(freq,dur,type){
+    if(!S.prefs.sound) return;
+    var c=getCtx(); if(!c) return;
+    function play(){
+      try{
+        var o=c.createOscillator(),g=c.createGain();
+        o.connect(g); g.connect(c.destination);
+        o.frequency.value=freq; o.type=type||'sine';
+        g.gain.setValueAtTime(0.28,c.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+dur);
+        o.start(c.currentTime); o.stop(c.currentTime+dur);
+      }catch(e){}
     }
+    if(c.state==='suspended') c.resume().then(play); else play();
+  }
+  return{
+    phaseEnd:function(){beep(880,.25);setTimeout(function(){beep(1100,.25);},350);setTimeout(function(){beep(1320,.4);},700);},
+    start:function(){beep(660,.08);},
+    stop:function(){beep(440,.08);},
+    resume:function(){var c=getCtx();if(c&&c.state==='suspended')c.resume();}
+  };
+})();
+
+/* ══════════════════════════════════════
+   POMODORO BACKGROUND WORKER
+   Runs in a separate thread — not throttled like rAF/setInterval in hidden tabs.
+   Only active when a Pomodoro timer is running.
+══════════════════════════════════════ */
+var pomWorker=null;
+function startPomWorker(){
+  if(pomWorker) return;
+  try{
+    var code='setInterval(function(){postMessage(1);},500);';
+    var url=URL.createObjectURL(new Blob([code],{type:'application/javascript'}));
+    pomWorker=new Worker(url);
+    URL.revokeObjectURL(url);
+    pomWorker.onmessage=function(){
+      if(!S.activeId){stopPomWorker();return;}
+      var t=S.timers.find(function(x){return x.id===S.activeId;});
+      if(!t||!t.pom||!t.active||!t.startTime){stopPomWorker();return;}
+      t.elapsed=Date.now()-t.startTime;
+      checkPomPhase(t);
+    };
+  }catch(e){console.warn('PomWorker unavailable:',e);}
+}
+function stopPomWorker(){
+  if(pomWorker){pomWorker.terminate();pomWorker=null;}
 }
 
-loadNotebook();
+/* ══════════════════════════════════════
+   TIMER ENGINE
+══════════════════════════════════════ */
+var rafId=null,rafRunning=false;
 
+function tick(){
+  var t=S.timers.find(function(x){return x.id===S.activeId;});
+  if(!t||!t.active){rafRunning=false;rafId=null;return;}
+  t.elapsed=Date.now()-t.startTime;
+  if(t.pom) checkPomPhase(t);
+  Render.updateActive();
+  rafId=requestAnimationFrame(tick);
+}
+function startRaf(){if(!rafRunning){rafRunning=true;rafId=requestAnimationFrame(tick);}}
+function stopRaf(){if(rafId){cancelAnimationFrame(rafId);rafId=null;}rafRunning=false;}
+
+function pomTotal(t){
+  if(t.pomPhase==='work')  return S.prefs.pomWork*60000;
+  if(t.pomPhase==='break') return S.prefs.pomBreak*60000;
+  return S.prefs.pomLong*60000;
+}
+function checkPomPhase(t){
+  var iters=0;
+  while(iters<20){
+    var total=pomTotal(t),phElapsed=t.elapsed-t.pomElapsed;
+    if(phElapsed<total) break;
+    t.pomElapsed+=total;
+    if(t.pomPhase==='work'){
+      t.pomCount++;
+      t.pomPhase=(t.pomCount%4===0)?'long':'break';
+    } else {
+      t.pomPhase='work';
+    }
+    iters++;
+    Sounds.phaseEnd();
+    addLog(T('logPomDone')+': '+t.name);
+    markDirty();
+  }
+}
+
+function activateTimer(id){
+  pauseActive(false);
+  var t=S.timers.find(function(x){return x.id===id;});
+  if(!t) return;
+  t.active=true;
+  t.startTime=Date.now()-t.elapsed;
+  t.lastSave=Date.now();
+  S.activeId=id;
+  Sounds.start();
+  updateStreak();
+  markDirty();
+  startRaf();
+  if(t.pom) startPomWorker();
+}
+function pauseActive(doSave){
+  if(!S.activeId) return;
+  var t=S.timers.find(function(x){return x.id===S.activeId;});
+  if(t){t.active=false;t.elapsed=Date.now()-t.startTime;t.startTime=null;t.lastSave=null;}
+  S.activeId=null;
+  stopRaf();
+  stopPomWorker();
+  Sounds.stop();
+  checkAch();
+  markDirty();
+  if(doSave!==false) saveAll();
+}
+
+/* FIX: no full re-render on toggle — surgical class update only */
+function toggleTimer(id){
+  var prevId=S.activeId;
+  if(S.activeId===id){
+    var t=S.timers.find(function(x){return x.id===id;});
+    addLog(T('logStopped')+': '+(t?t.name:'')+' ('+fmtShort(t?t.elapsed:0)+')');
+    pauseActive();
+  } else {
+    var t2=S.timers.find(function(x){return x.id===id;});
+    addLog(T('logStarted')+': '+(t2?t2.name:''));
+    activateTimer(id);
+    saveAll();
+  }
+  /* Update only the affected cards — no DOM rebuild, no flicker */
+  if(prevId){
+    var prev=document.querySelector('.timer-card[data-id="'+prevId+'"]');
+    if(prev) prev.classList.remove('active');
+  }
+  if(S.activeId){
+    var next=document.querySelector('.timer-card[data-id="'+S.activeId+'"]');
+    if(next) next.classList.add('active');
+  }
+}
+
+function deleteTimer(id){
+  if(S.activeId===id) pauseActive(false);
+  var idx=S.timers.findIndex(function(x){return x.id===id;});
+  if(idx===-1) return;
+  var t=S.timers[idx];
+  if(t.elapsed>0) S.history.push({timerId:t.id,name:t.name,cat:t.cat,date:today(),dur:t.elapsed});
+  addLog(T('logDeleted')+': '+t.name);
+  S.timers.splice(idx,1);
+  /* Remove card from DOM if animDel hasn't already */
+  var card=document.querySelector('.timer-card[data-id="'+id+'"]');
+  if(card) card.parentNode&&card.parentNode.removeChild(card);
+  markDirty();saveAll();
+  Render.renderCatFilter();
+  Render.renderStats();
+}
+
+/* FIX: reset now deletes all timers */
+function resetAll(){
+  pauseActive(false);
+  S.timers=[];
+  S.activeId=null;
+  S.filterCat=null;
+  addLog(T('logReset'));
+  markDirty();saveAll();
+  Render.renderTimers();
+  Render.renderCatFilter();
+  Render.renderStats();
+}
+
+/* ══════════════════════════════════════
+   LOG & STREAKS
+══════════════════════════════════════ */
+function addLog(msg){
+  var now=new Date();
+  var time=now.toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'});
+  S.log.push({ts:Date.now(),msg:time+' — '+msg});
+  if(S.log.length>200) S.log.shift();
+  markDirty();
+  Render.renderLog();
+}
+
+/* ══════════════════════════════════════
+   GAMIFICATION
+══════════════════════════════════════ */
+function updateStreak(){
+  var td=today(),s=S.streaks;
+  if(s.lastDate===td) return;
+  var yest=new Date(Date.now()-864e5).toISOString().split('T')[0];
+  s.cur=(s.lastDate===yest)?s.cur+1:1;
+  s.lastDate=td;
+  if(s.cur>s.best) s.best=s.cur;
+  checkAch();markDirty();
+  Render.renderFooter();
+}
+
+function checkAch(){
+  if(!S.streaks) return;
+  var s=S.streaks,a=s.ach||(s.ach=[]);
+  var newOnes=[];
+  function add(id){
+    if(a.indexOf(id)===-1){a.push(id);newOnes.push(id);addLog(T('achUnlocked')+': '+T('ach_'+id));}
+  }
+  /* Timer count (current + ever deleted) */
+  var everCreated=S.timers.length+S.history.length;
+  if(everCreated>=1) add('first_timer');
+  if(everCreated>=5) add('five_timers');
+  /* Total time (current timers + history) */
+  var cur=S.timers.reduce(function(acc,t){return acc+t.elapsed;},0);
+  var hist=S.history.reduce(function(acc,h){return acc+(h.dur||0);},0);
+  var grand=cur+hist;
+  if(grand>=3600000)   add('one_hour');
+  if(grand>=36000000)  add('ten_hours');
+  if(grand>=360000000) add('hundred_hours');
+  /* Pomodoro sessions */
+  var pomTotal=S.timers.reduce(function(acc,t){return acc+t.pomCount;},0);
+  if(pomTotal>=1)  add('pom_first');
+  if(pomTotal>=10) add('pom_ten');
+  /* Streaks */
+  if(s.cur>=3)  add('three_streak');
+  if(s.cur>=7)  add('week_streak');
+  if(s.cur>=30) add('month_streak');
+  /* Usage milestones */
+  if(s.nbWritten)  add('notebook_user');
+  if(s.exported)   add('exporter');
+  /* Toast notifications for new unlocks */
+  newOnes.forEach(function(id){showAchToast(T('ach_'+id));});
+  Render.renderFooter();
+}
+
+function showAchToast(label){
+  var t=document.createElement('div');
+  t.className='ach-toast';
+  t.textContent=T('achUnlocked')+': '+label;
+  document.body.appendChild(t);
+  setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},3100);
+}
+
+/* ══════════════════════════════════════
+   THEME (light / dark only)
+══════════════════════════════════════ */
+function applyTheme(th){
+  var root=document.documentElement;
+  if(th==='dark') root.setAttribute('data-theme','dark');
+  else root.removeAttribute('data-theme');
+  document.getElementById('themeBtn').textContent=th==='dark'?'🌙':'☀️';
+  S.prefs.theme=th;markDirty();saveAll();
+}
+function toggleTheme(){
+  applyTheme(S.prefs.theme==='dark'?'light':'dark');
+}
+
+var FONT_MIN=12,FONT_MAX=24,FONT_STEP=2;
+function applyFont(sz){
+  sz=Math.max(FONT_MIN,Math.min(FONT_MAX,sz));
+  document.documentElement.style.setProperty('--font-size-base',sz+'px');
+  S.prefs.fontSize=sz;
+  document.getElementById('fontDec').disabled=(sz<=FONT_MIN);
+  document.getElementById('fontInc').disabled=(sz>=FONT_MAX);
+  markDirty();saveAll();
+}
+
+/* ══════════════════════════════════════
+   RENDERER
+══════════════════════════════════════ */
+var Render=(function(){
+  function catColor(name){
+    var c=S.cats.find(function(x){return x.name===name;});
+    return c?c.color:'#9e9e9e';
+  }
+
+  function makePomRing(t){
+    var total=pomTotal(t),phEl=t.elapsed-t.pomElapsed;
+    var prog=Math.min(1,phEl/total);
+    var R=28,circ=2*Math.PI*R,offset=circ*(1-prog);
+    var color=t.pomPhase==='work'?'var(--pom-work)':t.pomPhase==='break'?'var(--pom-break)':'var(--pom-long)';
+    var remaining=Math.max(0,total-phEl);
+    var phLabel=T(t.pomPhase==='work'?'pomWork':t.pomPhase==='break'?'pomBreak':'pomLong');
+    var wrap=document.createElement('div');
+    wrap.className='pom-ring';
+    wrap.innerHTML='<svg viewBox="0 0 70 70"><circle class="ring-bg" cx="35" cy="35" r="'+R+'"/>'
+      +'<circle class="ring-prog" cx="35" cy="35" r="'+R
+      +'" stroke="'+color+'" stroke-dasharray="'+circ.toFixed(2)
+      +'" stroke-dashoffset="'+offset.toFixed(2)+'"/></svg>'
+      +'<div class="pom-time">'+fmtMs(remaining)+'</div>';
+    var ph=document.createElement('div');
+    ph.className='pom-phase';
+    ph.textContent=phLabel+' #'+(t.pomCount+1);
+    return{ring:wrap,phase:ph};
+  }
+
+  function renderTimers(){
+    var grid=document.getElementById('timerGrid');
+    var timers=S.filterCat
+      ? S.timers.filter(function(t){return t.cat===S.filterCat;})
+      : S.timers;
+    grid.innerHTML='';
+    timers.forEach(function(t){
+      grid.appendChild(makeCard(t));
+    });
+  }
+
+  function makeCard(t){
+    var card=document.createElement('div');
+    card.className='timer-card'+(t.active?' active':'');
+    card.dataset.id=t.id;
+    card.setAttribute('role','listitem');
+    card.setAttribute('tabindex','0');
+
+    /* delete btn */
+    var del=document.createElement('button');
+    del.className='timer-del';del.textContent='✕';
+    del.setAttribute('aria-label','Delete '+t.name);
+    del.addEventListener('click',function(e){
+      e.stopPropagation();
+      showConfirm(T('confirmDelete')+' «'+t.name+'»?',function(){
+        animDel(card,function(){deleteTimer(t.id);});
+      });
+    });
+    card.appendChild(del);
+
+    /* pomodoro ring */
+    if(t.pom){
+      var pom=makePomRing(t);
+      card.appendChild(pom.ring);
+      card.appendChild(pom.phase);
+    }
+
+    /* content */
+    var content=document.createElement('div');
+    content.className='timer-content';
+    var name=document.createElement('div');
+    name.className='timer-name';name.textContent=t.name;
+    content.appendChild(name);
+    var catBadge=document.createElement('span');
+    catBadge.className='timer-cat';
+    catBadge.style.background=catColor(t.cat);
+    catBadge.textContent=t.cat;
+    content.appendChild(catBadge);
+    card.appendChild(content);
+
+    if(!t.pom){
+      var timeEl=document.createElement('div');
+      timeEl.className='timer-time';timeEl.textContent=fmtMs(t.elapsed);
+      card.appendChild(timeEl);
+    }
+
+    card.addEventListener('click',function(){toggleTimer(t.id);});
+    card.addEventListener('keydown',function(e){
+      if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleTimer(t.id);}
+      if(e.key==='Delete'){
+        showConfirm(T('confirmDelete')+' «'+t.name+'»?',function(){
+          animDel(card,function(){deleteTimer(t.id);});
+        });
+      }
+    });
+    setupSwipe(card,t);
+    return card;
+  }
+
+  function setupSwipe(card,t){
+    var sx=0,dx=0,active=false,THRESH=80;
+    card.addEventListener('touchstart',function(e){sx=e.touches[0].clientX;dx=0;active=true;},{passive:true});
+    card.addEventListener('touchmove',function(e){
+      if(!active) return;
+      dx=e.touches[0].clientX-sx;
+      if(dx<0){
+        card.style.transform='translateX('+dx+'px)';
+        var ratio=Math.min(1,Math.abs(dx)/THRESH);
+        card.style.boxShadow='inset 0 0 0 2px rgba(229,57,53,'+ratio+')';
+      }
+    },{passive:true});
+    card.addEventListener('touchend',function(){
+      if(!active) return; active=false;
+      card.style.transform=''; card.style.boxShadow='';
+      if(dx<-THRESH){
+        showConfirm(T('confirmDelete')+' «'+t.name+'»?',function(){
+          animDel(card,function(){deleteTimer(t.id);});
+        });
+      }
+      dx=0;
+    });
+  }
+
+  function updateActive(){
+    var t=S.timers.find(function(x){return x.id===S.activeId;});
+    if(!t) return;
+    var card=document.querySelector('.timer-card[data-id="'+t.id+'"]');
+    if(!card) return;
+    if(t.pom){
+      var total=pomTotal(t),phEl=t.elapsed-t.pomElapsed;
+      var prog=Math.min(1,phEl/total);
+      var R=28,circ=2*Math.PI*R,offset=circ*(1-prog);
+      var progEl=card.querySelector('.ring-prog');
+      if(progEl){
+        progEl.setAttribute('stroke-dashoffset',offset.toFixed(2));
+        var color=t.pomPhase==='work'?'var(--pom-work)':t.pomPhase==='break'?'var(--pom-break)':'var(--pom-long)';
+        progEl.setAttribute('stroke',color);
+      }
+      var timeEl=card.querySelector('.pom-time');
+      if(timeEl) timeEl.textContent=fmtMs(Math.max(0,total-phEl));
+      var phEl2=card.querySelector('.pom-phase');
+      var phLabel=T(t.pomPhase==='work'?'pomWork':t.pomPhase==='break'?'pomBreak':'pomLong');
+      if(phEl2) phEl2.textContent=phLabel+' #'+(t.pomCount+1);
+    } else {
+      var tel=card.querySelector('.timer-time');
+      if(tel) tel.textContent=fmtMs(t.elapsed);
+    }
+  }
+
+  function renderCatFilter(){
+    var el=document.getElementById('catFilter');
+    el.innerHTML='';
+    function makeBtn(label,cat,color){
+      var b=document.createElement('button');
+      b.className='cat-btn'+(S.filterCat===cat?' active':'');
+      b.style.borderColor=color||'var(--border)';
+      if(S.filterCat===cat){b.style.background=color||'var(--accent)';b.style.color='#fff';}
+      b.textContent=label;
+      b.addEventListener('click',function(){S.filterCat=cat;renderCatFilter();renderTimers();});
+      el.appendChild(b);
+    }
+    makeBtn(T('allCats'),null,null);
+    var used={};
+    S.timers.forEach(function(t){used[t.cat]=true;});
+    S.cats.filter(function(c){return used[c.name];}).forEach(function(c){makeBtn(c.name,c.name,c.color);});
+  }
+
+  /* Populate the add-timer dialog select (called when cats change) */
+  function refreshCatSelect(){
+    var sel=document.getElementById('newCat');
+    if(!sel) return;
+    var cur=sel.value;
+    sel.innerHTML='';
+    S.cats.forEach(function(c){
+      var o=document.createElement('option');o.value=c.name;o.textContent=c.name;sel.appendChild(o);
+    });
+    if(cur) sel.value=cur;
+  }
+
+  function renderStats(){
+    var grid=document.getElementById('statsGrid');
+    var totalMs=S.timers.reduce(function(a,t){return a+t.elapsed;},0);
+    var activeName=(S.timers.find(function(t){return t.active;}))||null;
+    grid.innerHTML='<div class="stat-card"><div class="stat-val">'+fmtShort(totalMs)+'</div>'
+      +'<div class="stat-lbl" data-i18n="statSum">'+T('statSum')+'</div></div>'
+      +'<div class="stat-card"><div class="stat-val">'+S.timers.length+'</div>'
+      +'<div class="stat-lbl" data-i18n="statCount">'+T('statCount')+'</div></div>'
+      +'<div class="stat-card"><div class="stat-val">'+(activeName?activeName.name:'—')+'</div>'
+      +'<div class="stat-lbl" data-i18n="statActive">'+T('statActive')+'</div></div>'
+      +'<div class="stat-card"><div class="stat-val">'+(S.streaks?S.streaks.cur:0)+'</div>'
+      +'<div class="stat-lbl" data-i18n="statStreak">'+T('statStreak')+'</div></div>';
+    renderWeekChart();
+  }
+
+  function renderWeekChart(){
+    var chart=document.getElementById('weekChart');
+    var days=[];
+    for(var i=6;i>=0;i--){
+      days.push(new Date(Date.now()-i*864e5).toISOString().split('T')[0]);
+    }
+    var totals=days.map(function(d){
+      return S.history.filter(function(h){return h.date===d;})
+        .reduce(function(a,h){return a+h.dur;},0);
+    });
+    totals[6]+=S.timers.reduce(function(a,t){return a+t.elapsed;},0);
+    var mx=Math.max.apply(null,totals.concat([1]));
+    chart.innerHTML='';
+    days.forEach(function(d,i){
+      var col=document.createElement('div');col.className='bar-col';
+      var bar=document.createElement('div');bar.className='bar';
+      bar.style.height=((totals[i]/mx*78)+2)+'px';
+      bar.title=fmtShort(totals[i]);
+      var lbl=document.createElement('div');lbl.className='bar-lbl';
+      var locale=S.prefs.lang==='en'?'en':'ru';
+      lbl.textContent=new Date(d+'T12:00:00').toLocaleDateString(locale,{weekday:'short'}).slice(0,2);
+      col.appendChild(bar);col.appendChild(lbl);
+      chart.appendChild(col);
+    });
+  }
+
+  function renderLog(){
+    var ul=document.getElementById('actList');
+    ul.innerHTML='';
+    var items=[].concat(S.log).reverse().slice(0,50);
+    items.forEach(function(entry){
+      var li=document.createElement('li');li.textContent=entry.msg;ul.appendChild(li);
+    });
+  }
+
+  function renderFooter(){
+    var show=S.prefs.showGamif!==false;
+    var row=document.getElementById('gamifRow');
+    var btn=document.getElementById('gamifToggle');
+    if(row) row.style.display=show?'':'none';
+    if(btn){btn.title=T(show?'hideGamif':'showGamif');btn.style.opacity=show?'.6':'1';}
+    if(!show) return;
+    var s=S.streaks||{cur:0,best:0,ach:[]};
+    var el=document.getElementById('streakEl');
+    if(s.cur>0){
+      el.textContent='🔥 '+s.cur+' '+T('streakDays');
+      el.title='Текущая: '+s.cur+' / Рекорд: '+s.best;
+    } else {
+      el.textContent='';el.title='';
+    }
+    var ach=document.getElementById('achList');
+    ach.innerHTML='';
+    (s.ach||[]).forEach(function(id){
+      var label=T('ach_'+id);
+      if(label&&label!=='ach_'+id){
+        var span=document.createElement('span');span.className='ach';
+        span.textContent=label;span.title=label;ach.appendChild(span);
+      }
+    });
+  }
+
+  function renderSoundBtn(){
+    var b=document.getElementById('soundBtn');
+    b.textContent=S.prefs.sound?'🔊':'🔇';
+  }
+
+  /* Render categories in management dialog */
+  function renderCatMgmt(){
+    var list=document.getElementById('catMgmtList');
+    if(!list) return;
+    list.innerHTML='';
+    S.cats.forEach(function(c,idx){
+      var row=document.createElement('div');row.className='cat-list-item';
+      var dot=document.createElement('span');dot.className='cat-color-dot';
+      dot.style.background=c.color;
+      var name=document.createElement('span');name.textContent=c.name;
+      var del=document.createElement('button');del.className='danger';del.textContent='✕';
+      del.title='Delete';
+      del.addEventListener('click',function(){
+        S.cats.splice(idx,1);
+        /* Reassign timers with this category to first available */
+        var fallback=S.cats.length?S.cats[0].name:'Другое';
+        S.timers.forEach(function(t){if(t.cat===c.name)t.cat=fallback;});
+        markDirty();saveAll();
+        renderCatMgmt();
+        refreshCatSelect();
+        renderCatFilter();
+        renderTimers();
+      });
+      row.appendChild(dot);row.appendChild(name);row.appendChild(del);
+      list.appendChild(row);
+    });
+  }
+
+  function renderAll(){
+    renderCatFilter();renderTimers();renderStats();renderLog();renderFooter();renderSoundBtn();
+    refreshCatSelect();
+    document.getElementById('notebook').value=S.notebook;
+  }
+
+  return{renderAll,renderTimers,makeCard,renderCatFilter,renderStats,renderLog,renderFooter,
+    updateActive,renderSoundBtn,refreshCatSelect,renderCatMgmt};
+})();
+
+/* ══════════════════════════════════════
+   ANIMATIONS
+══════════════════════════════════════ */
+function animDel(el,cb){
+  el.classList.add('deleting');
+  setTimeout(function(){
+    if(el.parentNode) el.parentNode.removeChild(el);
+    cb();
+  },280);
+}
+
+/* ══════════════════════════════════════
+   DIALOGS
+══════════════════════════════════════ */
+var confirmCb=null;
+function showConfirm(msg,cb){
+  confirmCb=cb;
+  document.getElementById('dlgConfirmMsg').textContent=msg;
+  document.getElementById('dlgConfirm').showModal();
+}
+function showAddTimer(){
+  document.getElementById('newName').value='';
+  document.getElementById('newPom').checked=false;
+  document.getElementById('dlgAdd').showModal();
+  document.getElementById('newName').focus();
+}
+
+/* ══════════════════════════════════════
+   KEYBOARD
+══════════════════════════════════════ */
+function onKey(e){
+  if(['INPUT','TEXTAREA','SELECT'].indexOf(document.activeElement.tagName)!==-1) return;
+  if(document.querySelector('dialog[open]')) return;
+  var k=e.key;
+  if(k===' '||k==='Spacebar'){
+    e.preventDefault();
+    if(S.activeId) toggleTimer(S.activeId);
+    else if(S.timers.length) toggleTimer(S.timers[0].id);
+  } else if(k.toLowerCase()==='n'){e.preventDefault();showAddTimer();}
+  else if(k.toLowerCase()==='t'){e.preventDefault();toggleTheme();}
+  else if(k==='+'||k==='='){e.preventDefault();applyFont(S.prefs.fontSize+FONT_STEP);}
+  else if(k==='-'){e.preventDefault();applyFont(S.prefs.fontSize-FONT_STEP);}
+  else if(k==='Delete'&&S.activeId){
+    var t=S.timers.find(function(x){return x.id===S.activeId;});
+    if(t){
+      showConfirm(T('confirmDelete')+' «'+t.name+'»?',function(){
+        var card=document.querySelector('.timer-card[data-id="'+t.id+'"]');
+        if(card) animDel(card,function(){deleteTimer(t.id);});
+        else deleteTimer(t.id);
+      });
+    }
+  } else if(/^[1-9]$/.test(k)){
+    var idx=parseInt(k)-1;
+    if(S.timers[idx]) toggleTimer(S.timers[idx].id);
+  }
+}
+
+/* ══════════════════════════════════════
+   EXPORT
+══════════════════════════════════════ */
+function exportCSV(){
+  var BOM='\uFEFF';
+  var hdr=S.prefs.lang==='en'?'Timer,Category,Date,Duration (min)':'Таймер,Категория,Дата,Длительность (мин)';
+  var rows=[BOM+hdr];
+  S.timers.forEach(function(t){
+    rows.push('"'+t.name+'","'+t.cat+'","'+today()+'","'+Math.floor(t.elapsed/60000)+'"');
+  });
+  S.history.forEach(function(h){
+    rows.push('"'+h.name+'","'+(h.cat||'')+'","'+h.date+'","'+Math.floor(h.dur/60000)+'"');
+  });
+  dlBlob(rows.join('\r\n'),'time-tracker.csv','text/csv;charset=utf-8');
+}
+function exportJSON(){
+  dlBlob(JSON.stringify({exportDate:new Date().toISOString(),timers:S.timers,history:S.history,prefs:S.prefs},null,2),
+    'time-tracker.json','application/json');
+}
+function dlBlob(content,filename,type){
+  var blob=new Blob([content],{type:type});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');a.href=url;a.download=filename;a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ══════════════════════════════════════
+   INIT
+══════════════════════════════════════ */
+function addTimer(name,cat,pom){
+  var card;
+  S.timers.push({id:uid(),name:name,cat:cat,elapsed:0,active:false,lastSave:null,startTime:null,
+    pom:pom,pomPhase:'work',pomCount:0,pomElapsed:0});
+  addLog(T('logAdded')+': '+name);
+  checkAch();markDirty();saveAll();
+  /* Add only the new card — no full re-render */
+  var grid=document.getElementById('timerGrid');
+  var t=S.timers[S.timers.length-1];
+  /* Apply filter — only add card if matches current filter */
+  if(!S.filterCat||S.filterCat===t.cat){
+    card=Render.makeCard(t);
+    card.classList.add('card-new');
+    grid.appendChild(card);
+  }
+  Render.renderCatFilter();
+  Render.renderStats();
+}
+
+function init(){
+  loadAll();
+  checkAch();
+  applyTheme(S.prefs.theme||'light');
+  applyFont(S.prefs.fontSize||16);
+
+  if('ontouchstart' in window||navigator.maxTouchPoints>0)
+    document.body.classList.add('touch-device');
+
+  Render.renderAll();
+  applyLang();
+  setInterval(saveAll,5000);
+
+  if(S.activeId){
+    var at=S.timers.find(function(x){return x.id===S.activeId;});
+    if(at&&at.active){startRaf();if(at.pom)startPomWorker();}
+  }
+
+  /* ── gamification toggle ── */
+  document.getElementById('gamifToggle').addEventListener('click',function(){
+    S.prefs.showGamif=!S.prefs.showGamif;markDirty();saveAll();Render.renderFooter();
+  });
+
+  /* ── close dialogs on backdrop click ── */
+  document.querySelectorAll('dialog').forEach(function(dlg){
+    dlg.addEventListener('click',function(e){if(e.target===dlg) dlg.close();});
+  });
+  /* ── confirm dialog: clear cb on any close ── */
+  document.getElementById('dlgConfirm').addEventListener('close',function(){confirmCb=null;});
+
+  /* ── toolbar ── */
+  document.getElementById('addBtn').addEventListener('click',showAddTimer);
+  document.getElementById('pauseBtn').addEventListener('click',function(){
+    var prevId=S.activeId;
+    pauseActive();
+    if(prevId){
+      var card=document.querySelector('.timer-card[data-id="'+prevId+'"]');
+      if(card) card.classList.remove('active');
+    }
+  });
+  document.getElementById('resetBtn').addEventListener('click',function(){
+    showConfirm(T('confirmReset'),resetAll);
+  });
+  document.getElementById('themeBtn').addEventListener('click',toggleTheme);
+  document.getElementById('fontInc').addEventListener('click',function(){applyFont(S.prefs.fontSize+FONT_STEP);});
+  document.getElementById('fontDec').addEventListener('click',function(){applyFont(S.prefs.fontSize-FONT_STEP);});
+  document.getElementById('soundBtn').addEventListener('click',function(){
+    S.prefs.sound=!S.prefs.sound;markDirty();saveAll();Render.renderSoundBtn();
+  });
+  document.getElementById('pomBtn').addEventListener('click',function(){
+    document.getElementById('pomWork').value=S.prefs.pomWork;
+    document.getElementById('pomBreak').value=S.prefs.pomBreak;
+    document.getElementById('pomLong').value=S.prefs.pomLong;
+    document.getElementById('dlgPom').showModal();
+  });
+  document.getElementById('langBtn').addEventListener('click',function(){
+    S.prefs.lang=(S.prefs.lang==='ru'?'en':'ru');
+    applyLang();
+  });
+  document.getElementById('manageCatsBtn').addEventListener('click',function(){
+    Render.renderCatMgmt();
+    document.getElementById('newCatName').value='';
+    document.getElementById('dlgCats').showModal();
+    document.getElementById('newCatName').focus();
+  });
+
+  /* ── add timer dialog ── */
+  document.getElementById('dlgAddOk').addEventListener('click',function(){
+    var name=document.getElementById('newName').value.trim();
+    if(!name) return;
+    document.getElementById('dlgAdd').close();
+    addTimer(name,document.getElementById('newCat').value,document.getElementById('newPom').checked);
+  });
+  document.getElementById('dlgAddCancel').addEventListener('click',function(){document.getElementById('dlgAdd').close();});
+  document.getElementById('newName').addEventListener('keydown',function(e){
+    if(e.key==='Enter'){e.preventDefault();e.stopPropagation();document.getElementById('dlgAddOk').click();}
+    if(e.key==='Escape'){e.preventDefault();document.getElementById('dlgAdd').close();}
+  });
+
+  /* ── confirm dialog ── */
+  document.getElementById('dlgConfirmOk').addEventListener('click',function(){
+    document.getElementById('dlgConfirm').close();
+    if(confirmCb){confirmCb();confirmCb=null;}
+  });
+  document.getElementById('dlgConfirmCancel').addEventListener('click',function(){
+    document.getElementById('dlgConfirm').close();confirmCb=null;
+  });
+
+  /* ── pomodoro dialog ── */
+  document.getElementById('dlgPomOk').addEventListener('click',function(){
+    S.prefs.pomWork=parseInt(document.getElementById('pomWork').value)||25;
+    S.prefs.pomBreak=parseInt(document.getElementById('pomBreak').value)||5;
+    S.prefs.pomLong=parseInt(document.getElementById('pomLong').value)||15;
+    markDirty();saveAll();document.getElementById('dlgPom').close();
+  });
+  document.getElementById('dlgPomCancel').addEventListener('click',function(){document.getElementById('dlgPom').close();});
+
+  /* ── categories dialog ── */
+  document.getElementById('addCatBtn').addEventListener('click',function(){
+    var name=document.getElementById('newCatName').value.trim();
+    if(!name) return;
+    var color=document.getElementById('newCatColor').value;
+    S.cats.push({name:name,color:color});
+    document.getElementById('newCatName').value='';
+    markDirty();saveAll();
+    Render.renderCatMgmt();
+    Render.refreshCatSelect();
+    Render.renderCatFilter();
+  });
+  document.getElementById('newCatName').addEventListener('keydown',function(e){
+    if(e.key==='Enter'){e.preventDefault();document.getElementById('addCatBtn').click();}
+  });
+  /* Enter saves in Pomodoro settings */
+  ['pomWork','pomBreak','pomLong'].forEach(function(id){
+    document.getElementById(id).addEventListener('keydown',function(e){
+      if(e.key==='Enter'){e.preventDefault();document.getElementById('dlgPomOk').click();}
+    });
+  });
+  document.getElementById('newCatColor').addEventListener('change',function(){
+    var n=document.getElementById('newCatName');
+    if(n.value.trim()) document.getElementById('addCatBtn').focus();
+    else n.focus();
+  });
+  document.getElementById('dlgCatsClose').addEventListener('click',function(){
+    document.getElementById('dlgCats').close();
+  });
+
+  /* ── notebook ── */
+  document.getElementById('notebook').addEventListener('input',function(){
+    S.notebook=this.value;
+    if(this.value.trim()&&!S.streaks.nbWritten){S.streaks.nbWritten=true;checkAch();}
+    markDirty();
+  });
+
+  /* ── stats open ── */
+  document.getElementById('statsSection').addEventListener('toggle',function(){
+    if(this.open) Render.renderStats();
+  });
+
+  /* ── export ── */
+  document.getElementById('exportCsv').addEventListener('click',function(){
+    exportCSV();if(!S.streaks.exported){S.streaks.exported=true;checkAch();}
+  });
+  document.getElementById('exportJson').addEventListener('click',function(){
+    exportJSON();if(!S.streaks.exported){S.streaks.exported=true;checkAch();}
+  });
+
+  /* ── keyboard ── */
+  document.addEventListener('keydown',onKey);
+}
+
+init();
+
+})();
 </script>
 </body>
 </html>
