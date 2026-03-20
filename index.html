@@ -628,7 +628,10 @@ function loadAll(){
           pom:t.pom||t.pomodoroMode||false,
           pomPhase:t.pomPhase||t.pomodoroPhase||'work',
           pomCount:t.pomCount||t.pomodoroCount||0,
-          pomElapsed:t.pomElapsed||t.pomodoroElapsed||0
+          pomElapsed:t.pomElapsed||t.pomodoroElapsed||0,
+          pomWorkMs:t.pomWorkMs||0,
+          pomBreakMs:t.pomBreakMs||0,
+          demo:t.demo||false
         };
       });
       var act=S.timers.find(function(t){return t.active;});
@@ -732,7 +735,7 @@ var rafId=null,rafRunning=false;
 var starPromptDone=!!localStorage.getItem('starPromptShown');
 function checkStarPrompt(){
   if(starPromptDone) return;
-  var total=S.timers.reduce(function(s,t){return s+t.elapsed;},0);
+  var total=S.timers.reduce(function(s,t){return s+(t.demo?0:t.elapsed);},0);
   if(total<1800000) return;
   starPromptDone=true;
   localStorage.setItem('starPromptShown','1');
@@ -781,9 +784,11 @@ function checkPomPhase(t){
     if(phElapsed<total) break;
     t.pomElapsed+=total;
     if(t.pomPhase==='work'){
+      t.pomWorkMs=(t.pomWorkMs||0)+total;
       t.pomCount++;
       t.pomPhase=(t.pomCount%4===0)?'long':'break';
     } else {
+      t.pomBreakMs=(t.pomBreakMs||0)+total;
       t.pomPhase='work';
     }
     iters++;
@@ -850,7 +855,7 @@ function deleteTimer(id){
   var idx=S.timers.findIndex(function(x){return x.id===id;});
   if(idx===-1) return;
   var t=S.timers[idx];
-  if(t.elapsed>0) S.history.push({timerId:t.id,name:t.name,cat:t.cat,date:today(),dur:t.elapsed});
+  if(t.elapsed>0&&!t.demo) S.history.push({timerId:t.id,name:t.name,cat:t.cat,date:today(),dur:t.elapsed});
   addLog(T('logDeleted')+': '+t.name);
   S.timers.splice(idx,1);
   /* Remove card from DOM if animDel hasn't already */
@@ -908,19 +913,20 @@ function checkAch(){
   function add(id){
     if(a.indexOf(id)===-1){a.push(id);newOnes.push(id);addLog(T('achUnlocked')+': '+T('ach_'+id));}
   }
-  /* Timer count (current + ever deleted) */
-  var everCreated=S.timers.length+S.history.length;
+  /* Timer count (current + ever deleted) — demo timers excluded */
+  var realTimers=S.timers.filter(function(t){return!t.demo;});
+  var everCreated=realTimers.length+S.history.length;
   if(everCreated>=1) add('first_timer');
   if(everCreated>=5) add('five_timers');
-  /* Total time (current timers + history) */
-  var cur=S.timers.reduce(function(acc,t){return acc+t.elapsed;},0);
+  /* Total time (real timers + history) — demo timers excluded */
+  var cur=realTimers.reduce(function(acc,t){return acc+t.elapsed;},0);
   var hist=S.history.reduce(function(acc,h){return acc+(h.dur||0);},0);
   var grand=cur+hist;
   if(grand>=3600000)   add('one_hour');
   if(grand>=36000000)  add('ten_hours');
   if(grand>=360000000) add('hundred_hours');
-  /* Pomodoro sessions */
-  var pomTotal=S.timers.reduce(function(acc,t){return acc+t.pomCount;},0);
+  /* Pomodoro sessions — demo timers excluded */
+  var pomTotal=realTimers.reduce(function(acc,t){return acc+t.pomCount;},0);
   if(pomTotal>=1)  add('pom_first');
   if(pomTotal>=10) add('pom_ten');
   /* Streaks */
@@ -1640,11 +1646,11 @@ function setupFirstVisit(){
   // Three starter timers: different categories, one with pomodoro
   var starters=[
     {id:'sv1', name:'Рабочий проект',        cat:'Работа', elapsed:4800000,
-     active:false,lastSave:null,startTime:null,pom:false,pomPhase:'work',pomCount:0,pomElapsed:0},
+     active:false,lastSave:null,startTime:null,pom:false,pomPhase:'work',pomCount:0,pomElapsed:0,demo:true},
     {id:'sv2', name:'Онлайн-курс',           cat:'Учёба',  elapsed:2100000,
-     active:false,lastSave:null,startTime:null,pom:true, pomPhase:'work',pomCount:2,pomElapsed:0},
+     active:false,lastSave:null,startTime:null,pom:true, pomPhase:'work',pomCount:2,pomElapsed:0,pomWorkMs:3000000,pomBreakMs:600000,demo:true},
     {id:'sv3', name:'Прогулка / спорт',      cat:'Личное', elapsed:1680000,
-     active:false,lastSave:null,startTime:null,pom:false,pomPhase:'work',pomCount:0,pomElapsed:0}
+     active:false,lastSave:null,startTime:null,pom:false,pomPhase:'work',pomCount:0,pomElapsed:0,demo:true}
   ];
   localStorage.setItem('timers',        JSON.stringify(starters));
   localStorage.setItem('schemaVersion', '3');
