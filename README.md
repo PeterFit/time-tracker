@@ -107,5 +107,6 @@
 
 ## Ссылки
 
-- [GitHub](https://github.com/PeterFit/gpt-time-tracker)
+- [GitHub](https://github.com/PeterFit/time-tracker)
+- [GitHub Pages](https://peterfit.github.io/time-tracker/)
 - [Telegram автора](https://t.me/peterfit)
