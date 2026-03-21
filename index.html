@@ -1002,6 +1002,7 @@ function toggleTimer(id){
 
 function deleteTimer(id){
   if(S.activeId===id) pauseActive(false);
+  if(PiP.getPipTimerId()===id) PiP.clearPipTimer();
   var idx=S.timers.findIndex(function(x){return x.id===id;});
   if(idx===-1) return;
   var t=S.timers[idx];
@@ -1345,11 +1346,12 @@ var Render=(function(){
 
   function renderStats(){
     var grid=document.getElementById('statsGrid');
-    var totalMs=S.timers.reduce(function(a,t){return a+t.elapsed;},0);
+    var realT=S.timers.filter(function(t){return!t.demo;});
+    var totalMs=realT.reduce(function(a,t){return a+t.elapsed;},0);
     var activeName=(S.timers.find(function(t){return t.active;}))||null;
     grid.innerHTML='<div class="stat-card"><div class="stat-val">'+fmtShort(totalMs)+'</div>'
       +'<div class="stat-lbl" data-i18n="statSum">'+T('statSum')+'</div></div>'
-      +'<div class="stat-card"><div class="stat-val">'+S.timers.length+'</div>'
+      +'<div class="stat-card"><div class="stat-val">'+realT.length+'</div>'
       +'<div class="stat-lbl" data-i18n="statCount">'+T('statCount')+'</div></div>'
       +'<div class="stat-card"><div class="stat-val">'+(activeName?activeName.name:'—')+'</div>'
       +'<div class="stat-lbl" data-i18n="statActive">'+T('statActive')+'</div></div>'
@@ -1368,7 +1370,7 @@ var Render=(function(){
       return S.history.filter(function(h){return h.date===d;})
         .reduce(function(a,h){return a+h.dur;},0);
     });
-    totals[6]+=S.timers.reduce(function(a,t){return a+t.elapsed;},0);
+    totals[6]+=S.timers.filter(function(t){return!t.demo;}).reduce(function(a,t){return a+t.elapsed;},0);
     var mx=Math.max.apply(null,totals.concat([1]));
     chart.innerHTML='';
     days.forEach(function(d,i){
@@ -1437,6 +1439,7 @@ var Render=(function(){
       var del=document.createElement('button');del.className='danger';del.textContent='✕';
       del.title='Delete';
       del.addEventListener('click',function(){
+        if(S.filterCat===c.name) S.filterCat=null;
         S.cats.splice(idx,1);
         /* Reassign timers with this category to first available */
         var fallback=S.cats.length?S.cats[0].name:'Другое';
@@ -1733,7 +1736,9 @@ var PiP=(function(){
     }
   }
 
-  return{toggle:toggle,update:update,updateBtn:updateBtn,supported:supported};
+  return{toggle:toggle,update:update,updateBtn:updateBtn,supported:supported,
+    getPipTimerId:function(){return pipTimerId;},
+    clearPipTimer:function(){pipTimerId=S.activeId||(S.timers.length?S.timers[0].id:null);}};
 })();
 
 /* ══════════════════════════════════════
@@ -1804,7 +1809,7 @@ function exportCSV(){
   var BOM='\uFEFF';
   var hdr=S.prefs.lang==='en'?'Timer,Category,Date,Duration (min)':'Таймер,Категория,Дата,Длительность (мин)';
   var rows=[BOM+hdr];
-  S.timers.forEach(function(t){
+  S.timers.filter(function(t){return!t.demo;}).forEach(function(t){
     rows.push('"'+t.name+'","'+t.cat+'","'+today()+'","'+Math.floor(t.elapsed/60000)+'"');
   });
   S.history.forEach(function(h){
@@ -1813,7 +1818,7 @@ function exportCSV(){
   dlBlob(rows.join('\r\n'),'time-tracker.csv','text/csv;charset=utf-8');
 }
 function exportJSON(){
-  dlBlob(JSON.stringify({exportDate:new Date().toISOString(),timers:S.timers,history:S.history,prefs:S.prefs},null,2),
+  dlBlob(JSON.stringify({exportDate:new Date().toISOString(),timers:S.timers.filter(function(t){return!t.demo;}),history:S.history,prefs:S.prefs},null,2),
     'time-tracker.json','application/json');
 }
 function dlBlob(content,filename,type){
@@ -1861,6 +1866,7 @@ function restartCountdown(id){
     if(tel){tel.textContent=fmtMs(t.cdMs);tel.className='timer-time';}
   }
   addLog('↺ '+t.name);
+  showToast('↺ '+t.name);
   markDirty();saveAll();
   startRaf();
   PiP.update();
@@ -2010,7 +2016,11 @@ function init(){
     if(countdown){
       var mins=parseInt(document.getElementById('cdMinutes').value)||0;
       var secs=parseInt(document.getElementById('cdSeconds').value)||0;
-      cdMs=Math.max(1000,mins*60000+secs*1000);
+      cdMs=mins*60000+secs*1000;
+      if(cdMs<1000){
+        document.getElementById('cdSeconds').focus();
+        return;
+      }
     }
     var pom=!countdown&&document.getElementById('newPom').checked;
     document.getElementById('dlgAdd').close();
