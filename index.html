@@ -940,7 +940,7 @@ function checkPomPhase(t){
 }
 
 function activateTimer(id){
-  pauseActive(false);
+  pauseActive(false,true);
   var t=S.timers.find(function(x){return x.id===id;});
   if(!t) return;
   t.active=true;
@@ -953,7 +953,7 @@ function activateTimer(id){
   startRaf();
   if(t.pom) startPomWorker();
 }
-function pauseActive(doSave){
+function pauseActive(doSave,silent){
   if(!S.activeId) return;
   var t=S.timers.find(function(x){return x.id===S.activeId;});
   if(t){
@@ -964,7 +964,7 @@ function pauseActive(doSave){
   S.activeId=null;
   stopRaf();
   stopPomWorker();
-  Sounds.stop();
+  if(!silent) Sounds.stop();
   PiP.update();
   checkAch();
   markDirty();
@@ -1760,6 +1760,7 @@ function showConfirm(msg,cb){
   confirmCb=cb;
   document.getElementById('dlgConfirmMsg').textContent=msg;
   document.getElementById('dlgConfirm').showModal();
+  document.getElementById('dlgConfirmOk').focus();
 }
 function showAddTimer(){
   document.getElementById('newName').value='';
