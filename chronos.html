@@ -531,18 +531,207 @@ let state = {
 let activeId = null;     // currently running timer id
 let selectedId = null;   // selected (focused) timer id
 
-/* ---------- Persistence ---------- */
-function save(){ try{ localStorage.setItem('chronos3d', JSON.stringify({ ...state, activeId, selectedId })); }catch(e){} }
+/* ---------- Persistence — shared with index.html ----------
+   Используем те же localStorage-ключи что и 2D версия.
+   Chronos-специфичные данные (days, pomoCount) хранятся
+   в отдельном ключе _chronos_meta, который index.html игнорирует.
+   ---------------------------------------------------------- */
+
+// Achievement id mapping  chronos ↔ index
+const _ACH_C2I = {
+  first:'first_timer', timers5:'five_timers',
+  h1:'one_hour', h10:'ten_hours', h50:'fifty_hours',
+  streak3:'three_streak', streak7:'week_streak', streak30:'month_streak',
+  pomo1:'pom_first', pomo25:'pom_twentyfive',
+  export:'exporter', notes:'notebook_user'
+};
+const _ACH_I2C = Object.fromEntries(Object.entries(_ACH_C2I).map(([c,i])=>[i,c]));
+
+// Используем имя категории как id (универсально для Кириллицы и Latin)
+const _catSlug = (name) => (name||'').trim() || 'other';
+function _catIdForName(name){ const c=state.categories.find(x=>x.name===name); return c?c.id:_catSlug(name); }
+function _catNameById(id){ const c=state.categories.find(x=>x.id===id); return c?c.name:(state.categories[0]?.name||'Другое'); }
+const _pomI2C = (ph) => ph==='break'?'short':ph;   // index→chronos
+const _pomC2I = (ph) => ph==='short'?'break':ph;   // chronos→index
+
+function _loadMeta(){ try{ return JSON.parse(localStorage.getItem('_chronos_meta')||'{}'); }catch(e){ return {}; } }
+function _saveMeta(){ try{ localStorage.setItem('_chronos_meta', JSON.stringify({ days:state.streaks.days||[], pomoCount:state.streaks.pomoCount||0 })); }catch(e){} }
+
+function _loadFromIndexKeys(){
+  // 1. preferences (нужны раньше таймеров — для pomWork/pomBreak/pomLong)
+  const rawPrefs = localStorage.getItem('preferences');
+  const prefs = rawPrefs ? JSON.parse(rawPrefs) : {};
+  const pomWork  = (prefs.pomWork  || 25) * 60000;
+  const pomShort = (prefs.pomBreak ||  5) * 60000;
+  const pomLong  = (prefs.pomLong  || 15) * 60000;
+  state.preferences = {
+    theme: prefs.theme  || 'light',
+    font:  prefs.fontSize || 16,
+    lang:  prefs.lang   || 'ru',
+    sound: prefs.sound  !== false
+  };
+
+  // 2. categories: {name,color} → {id,name,color}
+  const rawCats = localStorage.getItem('categories');
+  if(rawCats){
+    state.categories = JSON.parse(rawCats).map(c=>({ id:_catSlug(c.name), name:c.name, color:c.color }));
+  }
+
+  // 3. timers
+  const rawTimers = localStorage.getItem('timers');
+  if(rawTimers){
+    state.timers = JSON.parse(rawTimers).filter(t=>!t.demo).map(t=>{
+      let elapsed = t.elapsed || t.elapsedTime || 0;
+      if(t.active && t.lastSave) elapsed += Date.now() - t.lastSave;
+      const running = t.active || false;
+      const startedAt = running ? (Date.now() - elapsed) : null;
+      const pomEnabled = !!(t.pom || t.pomodoroMode);
+      const phase = _pomI2C(t.pomPhase || 'work');
+      const remaining = phase==='short' ? pomShort : phase==='long' ? pomLong : pomWork;
+      return {
+        id: t.id,
+        name: t.timerName || t.name || 'Timer',
+        categoryId: _catIdForName(t.cat || t.category || ''),
+        accumulated: elapsed,
+        startedAt,
+        running,
+        pomodoro: pomEnabled ? {
+          enabled:true, phase,
+          workMs:pomWork, shortMs:pomShort, longMs:pomLong,
+          remaining,
+          phaseEndsAt: running ? (Date.now() + remaining) : null,
+          cycles: t.pomCount || 0,
+          autostart: true
+        } : { enabled:false }
+      };
+    });
+    const act = state.timers.find(t=>t.running);
+    activeId   = act ? act.id : null;
+    selectedId = activeId || state.timers[0]?.id || null;
+  }
+
+  // 4. notebook
+  const nb = localStorage.getItem('notebookContent');
+  if(nb !== null) state.notebookContent = nb;
+
+  // 5. history
+  const rawHist = localStorage.getItem('timerHistory');
+  if(rawHist){
+    state.timerHistory = JSON.parse(rawHist).map(h=>({
+      name: h.name, ms: h.dur||0,
+      deletedAt: h.date ? new Date(h.date+'T12:00:00').getTime() : Date.now()
+    }));
+  }
+
+  // 6. activity log
+  const rawLog = localStorage.getItem('activityLog');
+  if(rawLog){
+    state.activityLog = JSON.parse(rawLog).map(e=>({ ts:e.ts, text:e.msg||e.text||'' }));
+  }
+
+  // 7. streaks + chronos-specific meta
+  const rawStr = localStorage.getItem('streaks');
+  const meta   = _loadMeta();
+  if(rawStr){
+    const s = JSON.parse(rawStr);
+    state.streaks = {
+      current:  s.cur      || 0,
+      best:     s.best     || 0,
+      lastDay:  s.lastDate || null,
+      days:     meta.days  || [],
+      unlocked: (s.ach||[]).map(id=>_ACH_I2C[id]).filter(Boolean),
+      pomoCount: meta.pomoCount || 0,
+      exported: s.exported  || false,
+      noted:    s.nbWritten || false
+    };
+  }
+
+  lang = state.preferences.lang || 'ru';
+}
+
+function _saveToIndexKeys(){
+  // 1. timers
+  const indexTimers = state.timers.map(t=>({
+    id:t.id, name:t.name,
+    cat: _catNameById(t.categoryId),
+    elapsed: t.accumulated,
+    active:  t.running,
+    lastSave: t.running ? Date.now() : null,
+    startTime: t.startedAt,
+    pom:      t.pomodoro.enabled,
+    pomPhase: _pomC2I(t.pomodoro.enabled ? t.pomodoro.phase : 'work'),
+    pomCount: t.pomodoro.enabled ? (t.pomodoro.cycles||0) : 0,
+    pomElapsed:0, pomWorkMs:0, pomBreakMs:0, countdown:false, cdMs:0, demo:false
+  }));
+  localStorage.setItem('timers', JSON.stringify(indexTimers));
+
+  // 2. categories: drop id
+  localStorage.setItem('categories', JSON.stringify(state.categories.map(c=>({name:c.name,color:c.color}))));
+
+  // 3. preferences: сохраняем pomWork/pomBreak/pomLong из существующих
+  const rawPrefs = localStorage.getItem('preferences');
+  const existing = rawPrefs ? JSON.parse(rawPrefs) : {};
+  localStorage.setItem('preferences', JSON.stringify(Object.assign({}, existing, {
+    theme:state.preferences.theme, fontSize:state.preferences.font,
+    lang:state.preferences.lang,   sound:state.preferences.sound
+  })));
+
+  // 4. notebook
+  localStorage.setItem('notebookContent', state.notebookContent||'');
+
+  // 5. history
+  localStorage.setItem('timerHistory', JSON.stringify(
+    state.timerHistory.map(h=>({ timerId:'', name:h.name, cat:'',
+      date: new Date(h.deletedAt||Date.now()).toISOString().slice(0,10), dur:h.ms||0 }))
+  ));
+
+  // 6. activity log
+  localStorage.setItem('activityLog', JSON.stringify(state.activityLog.map(e=>({ts:e.ts,msg:e.text||''}))));
+
+  // 7. streaks: мёржим с существующими ач index.html
+  const rawStr = localStorage.getItem('streaks');
+  const exStr  = rawStr ? JSON.parse(rawStr) : {};
+  const mergedAch = [...new Set([
+    ...(exStr.ach||[]),
+    ...state.streaks.unlocked.map(id=>_ACH_C2I[id]).filter(Boolean)
+  ])];
+  localStorage.setItem('streaks', JSON.stringify({
+    cur:      state.streaks.current||0,
+    best:     state.streaks.best||0,
+    lastDate: state.streaks.lastDay||null,
+    ach:      mergedAch,
+    exported: state.streaks.exported||false,
+    nbWritten:state.streaks.noted||false,
+    cdCount:  exStr.cdCount||0
+  }));
+
+  // 8. chronos-specific (days, pomoCount) — отдельный мини-ключ
+  _saveMeta();
+}
+
+function save(){
+  try{ _saveToIndexKeys(); }catch(e){}
+}
+
 function load(){
   try{
+    // Если есть ключи index.html — грузим оттуда
+    if(localStorage.getItem('timers') !== null){
+      _loadFromIndexKeys();
+      return true;
+    }
+    // Миграция: были данные в chronos3d но не в index.html
     const raw = localStorage.getItem('chronos3d');
-    if(!raw) return false;
-    const d = JSON.parse(raw);
-    state = Object.assign(state, d);
-    activeId = d.activeId ?? null;
-    selectedId = d.selectedId ?? null;
-    lang = state.preferences.lang || 'ru';
-    return true;
+    if(raw){
+      const d = JSON.parse(raw);
+      state = Object.assign(state, d);
+      activeId   = d.activeId   ?? null;
+      selectedId = d.selectedId ?? null;
+      lang = state.preferences.lang || 'ru';
+      _saveToIndexKeys(); // сразу мигрируем в единые ключи
+      return true;
+    }
+    return false;
   }catch(e){ return false; }
 }
 
