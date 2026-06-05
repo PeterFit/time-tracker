@@ -584,10 +584,18 @@ function _loadFromIndexKeys(){
       let elapsed = t.elapsed || t.elapsedTime || 0;
       if(t.active && t.lastSave) elapsed += Date.now() - t.lastSave;
       const running = t.active || false;
-      const startedAt = running ? (Date.now() - elapsed) : null;
+      // `elapsed` — это полное накопленное время. Кладём его в базу (accumulated)
+      // и стартуем сегмент заново от now, иначе elapsedMs = accumulated + (now-startedAt)
+      // удвоит значение при перезагрузке.
+      const startedAt = running ? Date.now() : null;
       const pomEnabled = !!(t.pom || t.pomodoroMode);
       const phase = _pomI2C(t.pomPhase || 'work');
-      const remaining = phase==='short' ? pomShort : phase==='long' ? pomLong : pomWork;
+      const phaseTotal = phase==='short' ? pomShort : phase==='long' ? pomLong : pomWork;
+      // Остаток текущей фазы восстанавливаем из прогресса (как в 2D-версии):
+      // pomElapsed — время в завершённых фазах, поэтому elapsed - pomElapsed = прошло в текущей фазе.
+      // Это переживает перезагрузку и учитывает время, пока вкладка была закрыта.
+      const phaseElapsed = Math.min(phaseTotal, Math.max(0, elapsed - (t.pomElapsed || 0)));
+      const remaining = phaseTotal - phaseElapsed;
       return {
         id: t.id,
         name: t.timerName || t.name || 'Timer',
@@ -651,18 +659,31 @@ function _loadFromIndexKeys(){
 
 function _saveToIndexKeys(){
   // 1. timers
-  const indexTimers = state.timers.map(t=>({
+  const indexTimers = state.timers.map(t=>{
+   const total = elapsedMs(t);   // полное время, включая текущий запущенный сегмент
+   const p = t.pomodoro;
+   // Сохраняем прогресс текущей фазы как pomElapsed = total - (прошло в текущей фазе),
+   // чтобы при загрузке (здесь и в 2D) остаток фазы восстановился точно.
+   let pomElapsed = 0;
+   if(p.enabled){
+     const phaseTotal = p.phase==='short' ? p.shortMs : p.phase==='long' ? p.longMs : p.workMs;
+     const remaining = (t.running && p.phaseEndsAt) ? Math.max(0, p.phaseEndsAt - Date.now()) : (p.remaining || 0);
+     const phaseElapsed = Math.min(phaseTotal, Math.max(0, phaseTotal - remaining));
+     pomElapsed = Math.max(0, total - phaseElapsed);
+   }
+   return {
     id:t.id, name:t.name,
     cat: _catNameById(t.categoryId),
-    elapsed: t.accumulated,
+    elapsed: total,
     active:  t.running,
     lastSave: t.running ? Date.now() : null,
-    startTime: t.startedAt,
-    pom:      t.pomodoro.enabled,
-    pomPhase: _pomC2I(t.pomodoro.enabled ? t.pomodoro.phase : 'work'),
-    pomCount: t.pomodoro.enabled ? (t.pomodoro.cycles||0) : 0,
-    pomElapsed:0, pomWorkMs:0, pomBreakMs:0, countdown:false, cdMs:0, demo:false
-  }));
+    startTime: t.running ? (Date.now() - total) : null,
+    pom:      p.enabled,
+    pomPhase: _pomC2I(p.enabled ? p.phase : 'work'),
+    pomCount: p.enabled ? (p.cycles||0) : 0,
+    pomElapsed, pomWorkMs:0, pomBreakMs:0, countdown:false, cdMs:0, demo:false
+   };
+  });
   localStorage.setItem('timers', JSON.stringify(indexTimers));
 
   // 2. categories: drop id
